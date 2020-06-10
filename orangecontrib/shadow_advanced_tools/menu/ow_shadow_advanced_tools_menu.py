@@ -45,99 +45,80 @@
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # #########################################################################
 
-import os
+from PyQt5 import QtWidgets
+from oasys.menus.menu import OMenu
 
-try:
-    from setuptools import find_packages, setup
-except AttributeError:
-    from setuptools import find_packages, setup
+from orangecontrib.shadow_advanced_tools.widgets.thermal.ow_power_plot_xy import PowerPlotXY
 
-NAME = 'OASYS1-ShadowOui-Advanced-Tools'
-VERSION = '1.0.0'
-ISRELEASED = True
+class ShadowAdvancedToolsMenu(OMenu):
+    def __init__(self):
+        super().__init__(name="Shadow Advanced Tools")
 
-DESCRIPTION = 'ShadowOui advanced simulation tools'
-README_FILE = os.path.join(os.path.dirname(__file__), 'README.md')
-LONG_DESCRIPTION = open(README_FILE).read()
-AUTHOR = 'Luca Rebuffi'
-AUTHOR_EMAIL = 'lrebuffi@anl.gov'
-URL = 'https://github.com/oasys-kit/ShadowOui-Advanced-Tools'
-DOWNLOAD_URL = 'https://github.com/oasys-kit/ShadowOui-Advanced-Tools'
-LICENSE = 'GPLv3'
+        self.openContainer()
+        self.addContainer("Cumulative Plotting")
+        self.addSubMenu("Enable all the Power Plot XY widgets")
+        self.addSubMenu("Disable all the Power Plot XY widgets")
+        self.addSeparator()
+        self.addSubMenu("Select Plotting \"Yes\" in all the Power Plot XY widgets")
+        self.addSubMenu("Select Plotting \"No\" in all the Power Plot XY widgets")
+        self.addSeparator()
+        self.addSubMenu("Clear all the cumulated plots in Power Plot XY widgets")
+        self.closeContainer()
 
-KEYWORDS = (
-    'raytracing',
-    'simulator',
-    'oasys1',
-)
+    def executeAction_1(self, action):
+        try:
+            for link in self.canvas_main_window.current_document().scheme().links:
+                if not link.enabled:
+                    widget = self.canvas_main_window.current_document().scheme().widget_for_node(link.sink_node)
 
-CLASSIFIERS = (
-    'Development Status :: 5 - Production/Stable',
-    'Environment :: X11 Applications :: Qt',
-    'Environment :: Console',
-    'Environment :: Plugins',
-    'Programming Language :: Python :: 3',
-    'Intended Audience :: Science/Research',
-)
+                    if isinstance(widget, PowerPlotXY): link.set_enabled(True)
+        except Exception as exception:
+            QtWidgets.QMessageBox.critical(None, "Error",
+                exception.args[0],
+                QtWidgets.QMessageBox.Ok)
 
-SETUP_REQUIRES = (
-    'setuptools',
-)
+    def executeAction_2(self, action):
+        try:
+            for link in self.canvas_main_window.current_document().scheme().links:
+                if link.enabled:
+                    widget = self.canvas_main_window.current_document().scheme().widget_for_node(link.sink_node)
 
-INSTALL_REQUIRES = (
-    'setuptools',
-    'scikit-image',
-    'oasys-srwpy>=1.0.3'
-)
+                    if isinstance(widget, PowerPlotXY): link.set_enabled(False)
+        except Exception as exception:
+            QtWidgets.QMessageBox.critical(None, "Error",
+                exception.args[0],
+                QtWidgets.QMessageBox.Ok)
 
-PACKAGES = find_packages(exclude=('*.tests', '*.tests.*', 'tests.*', 'tests'))
+    def executeAction_3(self, action):
+        try:
+            for node in self.canvas_main_window.current_document().scheme().nodes:
+                widget = self.canvas_main_window.current_document().scheme().widget_for_node(node)
 
-PACKAGE_DATA = {
-    "orangecontrib.shadow_advanced_tools.widgets.optical_elements":["icons/*.png", "icons/*.jpg", "misc/*.png"],
-    "orangecontrib.shadow_advanced_tools.widgets.thermal":["icons/*.png", "icons/*.jpg", "misc/*.png"],
-    "orangecontrib.shadow_advanced_tools.widgets.scanning":["icons/*.png", "icons/*.jpg", "misc/*.png"],
-}
+                if isinstance(widget, PowerPlotXY): widget.view_type = 1
+        except Exception as exception:
+            QtWidgets.QMessageBox.critical(None, "Error",
+                exception.args[0],
+                QtWidgets.QMessageBox.Ok)
 
-NAMESPACE_PACAKGES = ["orangecontrib",
-                      "orangecontrib.shadow_advanced_tools",
-                      "orangecontrib.shadow_advanced_tools.widgets",
-                      ]
+    def executeAction_4(self, action):
+        try:
+            for node in self.canvas_main_window.current_document().scheme().nodes:
+                widget = self.canvas_main_window.current_document().scheme().widget_for_node(node)
 
-ENTRY_POINTS = {
-    'oasys.addons' : ("Shadow Advanced Tools = orangecontrib.shadow_advanced_tools",
-                      ),
-    'oasys.widgets' : (
-        "Shadow Advanced O.E. = orangecontrib.shadow_advanced_tools.widgets.optical_elements",
-        "Shadow Thermal Load = orangecontrib.shadow_advanced_tools.widgets.thermal",
-        "Shadow Scanning Loops = orangecontrib.shadow_advanced_tools.widgets.scanning",
-    ),
-    'oasys.menus': ("shadowadvancedtoolsmenu = orangecontrib.shadow_advanced_tools.menu",)
-}
+                if isinstance(widget, PowerPlotXY): widget.view_type = 0
+        except Exception as exception:
+            QtWidgets.QMessageBox.critical(None, "Error",
+                exception.args[0],
+                QtWidgets.QMessageBox.Ok)
 
-if __name__ == '__main__':
-    try:
-        import PyMca5, PyQt4
 
-        raise NotImplementedError("This version of APS ShadowOui doesn't work with Oasys1 beta.\nPlease install OASYS1 final release: https://www.aps.anl.gov/Science/Scientific-Software/OASYS")
-    except:
-        setup(
-              name = NAME,
-              version = VERSION,
-              description = DESCRIPTION,
-              long_description = LONG_DESCRIPTION,
-              author = AUTHOR,
-              author_email = AUTHOR_EMAIL,
-              url = URL,
-              download_url = DOWNLOAD_URL,
-              license = LICENSE,
-              keywords = KEYWORDS,
-              classifiers = CLASSIFIERS,
-              packages = PACKAGES,
-              package_data = PACKAGE_DATA,
-              setup_requires = SETUP_REQUIRES,
-              install_requires = INSTALL_REQUIRES,
-              entry_points = ENTRY_POINTS,
-              namespace_packages=NAMESPACE_PACAKGES,
-              include_package_data = True,
-              zip_safe = False,
-              )
+    def executeAction_5(self, action):
+        try:
+            for node in self.canvas_main_window.current_document().scheme().nodes:
+                widget = self.canvas_main_window.current_document().scheme().widget_for_node(node)
+
+                if isinstance(widget, PowerPlotXY): widget.clearResults(interactive=False)
+        except Exception as exception:
+            QtWidgets.QMessageBox.critical(None, "Error",
+                exception.args[0],
+                QtWidgets.QMessageBox.Ok)
