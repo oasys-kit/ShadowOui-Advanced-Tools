@@ -95,8 +95,8 @@ class HybridUndulator(GenericElement):
 
     TABS_AREA_HEIGHT = 620
 
-    name = "Shadow/SRW Hybrid Undulator"
-    description = "Shadow Source: Hybrid Undulator"
+    name = "Shadow/SRW Undulator"
+    description = "Shadow Source: Hybrid Shadow/SRW Undulator"
     icon = "icons/undulator.png"
     priority = 1
     maintainer = "Luca Rebuffi"
