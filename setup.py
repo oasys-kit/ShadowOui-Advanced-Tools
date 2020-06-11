@@ -53,7 +53,7 @@ except AttributeError:
     from setuptools import find_packages, setup
 
 NAME = 'OASYS1-ShadowOui-Advanced-Tools'
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 ISRELEASED = True
 
 DESCRIPTION = 'ShadowOui advanced simulation tools'
@@ -97,7 +97,6 @@ PACKAGES = find_packages(exclude=('*.tests', '*.tests.*', 'tests.*', 'tests'))
 PACKAGE_DATA = {
     "orangecontrib.shadow_advanced_tools.widgets.optical_elements":["icons/*.png", "icons/*.jpg", "misc/*.png"],
     "orangecontrib.shadow_advanced_tools.widgets.thermal":["icons/*.png", "icons/*.jpg", "misc/*.png"],
-    "orangecontrib.shadow_advanced_tools.widgets.scanning":["icons/*.png", "icons/*.jpg", "misc/*.png"],
 }
 
 NAMESPACE_PACAKGES = ["orangecontrib",
