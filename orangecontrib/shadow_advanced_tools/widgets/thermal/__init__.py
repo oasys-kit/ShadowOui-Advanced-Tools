@@ -6,4 +6,4 @@ BACKGROUND = "#A9D0F5"#"#0099ff"
 
 ICON = "icons/thermal.png"
 
-PRIORITY = 111
+PRIORITY = 107.2

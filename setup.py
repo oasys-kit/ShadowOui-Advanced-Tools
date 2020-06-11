@@ -109,7 +109,6 @@ ENTRY_POINTS = {
     'oasys.widgets' : (
         "Shadow Advanced O.E. = orangecontrib.shadow_advanced_tools.widgets.optical_elements",
         "Shadow Thermal Load = orangecontrib.shadow_advanced_tools.widgets.thermal",
-        "Shadow Scanning Loops = orangecontrib.shadow_advanced_tools.widgets.scanning",
     ),
     'oasys.menus': ("shadowadvancedtoolsmenu = orangecontrib.shadow_advanced_tools.menu",)
 }

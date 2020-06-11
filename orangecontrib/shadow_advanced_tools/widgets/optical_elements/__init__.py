@@ -6,4 +6,4 @@ BACKGROUND = "#A9D0F5"#"#0099ff"
 
 ICON = "icons/oe.png"
 
-PRIORITY = 111
+PRIORITY = 103.1
