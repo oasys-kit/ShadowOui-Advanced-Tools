@@ -410,16 +410,31 @@ class PowerLoopPoint(widget.OWWidget):
                     data = exchange_data.get_content("filters_data")
                     write_file = False
                 except:
-                    if not exchange_data.get_program_name() == "XOPPY": raise ValueError("Only XOPPY F1F2 and CRYSTAL widgets are accepted")
+                    if not exchange_data.get_program_name() == "XOPPY": raise ValueError("Only XOPPY widgets are accepted")
+                    if not exchange_data.get_widget_name() in ["XF1F2", "POWER", "XCRYSTAL", "MULTILAYER"]: raise ValueError("Only XF1F2, POWER, XCRYSTAL, MULTILAYER widgets are accepted")
+
+                    xoppy_data = exchange_data.get_content("xoppy_data")
 
                     if exchange_data.get_widget_name() == "XF1F2":
-                        data = exchange_data.get_content("xoppy_data")
-                    elif exchange_data.get_widget_name() == "XCRYSTAL":
-                        data = exchange_data.get_content("xoppy_data")
-                        cols = data.shape[1]
-                        data = exchange_data.get_content("xoppy_data")[0:cols:cols-1, 0:cols:cols-1]
-                    elif exchange_data.get_widget_name() == "MLAYER":
-                        data = exchange_data.get_content("xoppy_data")[0:3:2, 0:3:2]
+                        data = xoppy_data
+                    else:
+                        energies = xoppy_data[:, 0]
+
+                        if exchange_data.get_widget_name() == "POWER":
+                            data = numpy.zeros((len(energies), 2))
+                            data[:, 0] = energies
+                            data[:, 1] = xoppy_data[:, -1]/xoppy_data[:, 1]
+                        else:
+                            if exchange_data.get_widget_name() == "XCRYSTAL":
+                                reflectivity_s = xoppy_data[:, 3]
+                                reflectivity_p = xoppy_data[:, 4]
+                            elif exchange_data.get_widget_name() == "MULTILAYER":
+                                reflectivity_s = xoppy_data[:, 1]
+                                reflectivity_p = xoppy_data[:, 2]
+
+                            data = numpy.zeros((len(energies), 2))
+                            data[:, 0] = energies
+                            data[:, 1] = 0.5*(reflectivity_p + reflectivity_s)
 
                 self.filters = data
 
@@ -481,6 +496,10 @@ class PowerLoopPoint(widget.OWWidget):
 
                 if not self.filters is None:
                     flux_through_finite_aperture_filtered *= numpy.interp(energies, self.filters[:, 0], self.filters[:, 1])
+                    use_filters = True
+                else:
+                    use_filters = False
+
 
                 if write_file:
                     file = open("autobinning.dat", "w")
@@ -508,7 +527,7 @@ class PowerLoopPoint(widget.OWWidget):
                     cumulated_power = numpy.cumsum(power)
                     total_power     = cumulated_power[-1]
 
-                    if not self.filters is None:
+                    if use_filters:
                         power_filtered           = flux_through_finite_aperture_filtered * (1e3 * energy_step * codata.e)
                         cumulated_power_filtered = numpy.cumsum(power_filtered)
                         total_power_filtered     = cumulated_power_filtered[-1]
@@ -518,25 +537,34 @@ class PowerLoopPoint(widget.OWWidget):
                     self.cumulated_power_plot.clear()
                     self.spectral_flux_plot.clear()
 
-                    good = numpy.where(cumulated_power <= self.auto_perc_total_power*0.01*total_power)
+                    if use_filters:
+                        total_power_binning                  = total_power_filtered
+                        cumulated_power_binning              = cumulated_power_filtered
+                        flux_through_finite_aperture_binning = flux_through_finite_aperture_filtered
+                    else:
+                        total_power_binning                  = total_power
+                        cumulated_power_binning              = cumulated_power
+                        flux_through_finite_aperture_binning = flux_through_finite_aperture
+
+                    good = numpy.where(cumulated_power_binning <= self.auto_perc_total_power*0.01*total_power_binning)
 
                     energies                     = energies[good]
                     cumulated_power              = cumulated_power[good]
                     flux_through_finite_aperture = flux_through_finite_aperture[good]
 
-                    if not self.filters is None:
+                    if use_filters:
                         cumulated_power_filtered = cumulated_power_filtered[good]
                         flux_through_finite_aperture_filtered = flux_through_finite_aperture_filtered[good]
 
                     if self.autobinning==1: # constant power
-                        interpolated_cumulated_power = numpy.linspace(start=numpy.min(cumulated_power), stop=numpy.max(cumulated_power), num=self.auto_n_step+1)
-                        interpolated_energies        = numpy.interp(interpolated_cumulated_power, cumulated_power, energies)
+                        interpolated_cumulated_power = numpy.linspace(start=numpy.min(cumulated_power_binning), stop=numpy.max(cumulated_power_binning), num=self.auto_n_step+1)
+                        interpolated_energies        = numpy.interp(interpolated_cumulated_power, cumulated_power_binning, energies)
                         energy_steps = numpy.ediff1d(interpolated_energies)
 
                         interpolated_energies        = interpolated_energies[:-1]
                         interpolated_cumulated_power = interpolated_cumulated_power[:-1]
 
-                        power_steps  = numpy.ones(self.auto_n_step)*cumulated_power[-1]/self.auto_n_step
+                        power_steps  = numpy.ones(self.auto_n_step)*cumulated_power_binning[-1]/self.auto_n_step
 
                     elif self.autobinning==2: # constant energy
                         minimum_energy = energies[0]
@@ -544,37 +572,30 @@ class PowerLoopPoint(widget.OWWidget):
                         energy_step = (maximum_energy-minimum_energy)/self.auto_n_step
 
                         interpolated_energies        = numpy.arange(minimum_energy, maximum_energy, energy_step)
-                        interpolated_cumulated_power = numpy.interp(interpolated_energies, energies, cumulated_power)
+                        interpolated_cumulated_power = numpy.interp(interpolated_energies, energies, cumulated_power_binning)
 
                         energy_steps = numpy.ones(self.auto_n_step)*energy_step
                         power_steps  = numpy.ediff1d(numpy.append(numpy.zeros(1), interpolated_cumulated_power))
 
-                    flux_steps = numpy.interp(interpolated_energies, energies, flux_through_finite_aperture)
+                    flux_steps = numpy.interp(interpolated_energies, energies, flux_through_finite_aperture_binning)
 
                     self.energy_binnings = []
                     self.total_new_objects = 0
 
                     self.cumulated_power_plot.addCurve(energies, cumulated_power, replace=True, legend="Cumulated Power")
-                    if not self.filters is None:  self.cumulated_power_plot.addCurve(energies, cumulated_power_filtered, replace=False, legend="Cumulated Power Filters",
-                                                                                     linestyle="--", color="#006400")
+                    if use_filters:  self.cumulated_power_plot.addCurve(energies, cumulated_power_filtered, replace=False, legend="Cumulated Power Filters", color="#006400")
                     self.cumulated_power_plot.setGraphXLabel("Energy [eV]")
                     self.cumulated_power_plot.setGraphYLabel("Cumulated " + ("" if self.filters is None else " (Filtered)") + " Power" )
-                    if self.filters is None: self.cumulated_power_plot.setGraphTitle("Total Power: " + str(round(power_steps.sum(), 2)) + " W")
-                    else:self.cumulated_power_plot.setGraphTitle("Total (Filtered) Power: " + str(round(power_steps.sum(), 2)) + "  (" + str(round(total_power_filtered, 2)) +  ") W")
+                    self.cumulated_power_plot.setGraphTitle("Total Power: " + str(round(power_steps.sum(), 2)) + " W")
 
                     self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture, replace=True, legend="Spectral Flux")
-                    if not self.filters is None: self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture_filtered, replace=False, legend="Spectral Flux Filters",
-                                                                                  linestyle="--", color="#006400")
+                    if use_filters: self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture_filtered, replace=False, legend="Spectral Flux Filters", color="#006400")
                     self.spectral_flux_plot.setGraphXLabel("Energy [eV]")
                     self.spectral_flux_plot.setGraphYLabel("Flux [ph/s/.1%bw]")
-                    self.spectral_flux_plot.setGraphTitle("Spectral Flux" + ("" if self.filters is None else " (Filtered)"))
+                    self.spectral_flux_plot.setGraphTitle("Spectral Flux" + ("" if use_filters else " (Filtered)"))
 
-
-                    self.cumulated_power_plot.addCurve(interpolated_energies, interpolated_cumulated_power, replace=False, legend="Energy Binning",
-                                                       color="red", linestyle=" ", symbol="+")
-
-                    self.spectral_flux_plot.addCurve(interpolated_energies, flux_steps, replace=False, legend="Energy Binning",
-                                                       color="red", linestyle=" ", symbol="+")
+                    self.cumulated_power_plot.addCurve(interpolated_energies, interpolated_cumulated_power, replace=False, legend="Energy Binning", color="red", linestyle=" ", symbol="+")
+                    self.spectral_flux_plot.addCurve(interpolated_energies, flux_steps, replace=False, legend="Energy Binning", color="red", linestyle=" ", symbol="+")
 
                     text = ""
 
