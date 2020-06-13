@@ -50,8 +50,9 @@ import sys, numpy, os
 import scipy.constants as codata
 m2ev = codata.c * codata.h / codata.e
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QFont, QColor
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMessageBox, QDockWidget
 
 from orangewidget.widget import OWAction
 from orangewidget import gui
@@ -318,22 +319,22 @@ class PowerLoopPoint(widget.OWWidget):
         tab_fil = oasysgui.createTabPage(tabs, "Filter")
 
         self.cumulated_power_plot = oasysgui.plotWindow(tab_plot, position=True)
-        self.cumulated_power_plot.setFixedHeight(self.height()-20)
-        self.cumulated_power_plot.setFixedWidth(775)
+        self.cumulated_power_plot.setFixedHeight(self.height()-60)
+        self.cumulated_power_plot.setFixedWidth(765)
         self.cumulated_power_plot.setGraphXLabel("Energy [eV]")
         self.cumulated_power_plot.setGraphYLabel("Cumulated Power [W]")
         self.cumulated_power_plot.setGraphTitle("Cumulated Power")
 
         self.spectral_flux_plot = oasysgui.plotWindow(tab_flux, position=True)
-        self.spectral_flux_plot.setFixedHeight(self.height()-20)
-        self.spectral_flux_plot.setFixedWidth(775)
+        self.spectral_flux_plot.setFixedHeight(self.height()-60)
+        self.spectral_flux_plot.setFixedWidth(765)
         self.spectral_flux_plot.setGraphXLabel("Energy [eV]")
         self.spectral_flux_plot.setGraphYLabel("Flux [ph/s/.1%bw]")
         self.spectral_flux_plot.setGraphTitle("Spectral Flux")
 
         self.filter_plot = oasysgui.plotWindow(tab_fil, position=True)
-        self.filter_plot.setFixedHeight(self.height()-20)
-        self.filter_plot.setFixedWidth(775)
+        self.filter_plot.setFixedHeight(self.height()-60)
+        self.filter_plot.setFixedWidth(765)
         self.filter_plot.setGraphXLabel("Energy [eV]")
         self.filter_plot.setGraphYLabel("Intensity Factor")
         self.filter_plot.setGraphTitle("Filter on Flux")
@@ -582,14 +583,20 @@ class PowerLoopPoint(widget.OWWidget):
                     self.energy_binnings = []
                     self.total_new_objects = 0
 
-                    self.cumulated_power_plot.addCurve(energies, cumulated_power, replace=True, legend="Cumulated Power")
-                    if use_filters:  self.cumulated_power_plot.addCurve(energies, cumulated_power_filtered, replace=False, legend="Cumulated Power Filters", color="#006400")
+                    if not use_filters:
+                        self.cumulated_power_plot.addCurve(energies, cumulated_power, replace=True, legend="Cumulated Power")
+                    else:
+                        self.cumulated_power_plot.addCurve(energies, cumulated_power, replace=True, linestyle="--", legend="Cumulated Power")
+                        self.cumulated_power_plot.addCurve(energies, cumulated_power_filtered, replace=False, legend="Cumulated Power (Filtered)", color="#006400")
                     self.cumulated_power_plot.setGraphXLabel("Energy [eV]")
                     self.cumulated_power_plot.setGraphYLabel("Cumulated " + ("" if self.filters is None else " (Filtered)") + " Power" )
                     self.cumulated_power_plot.setGraphTitle("Total Power: " + str(round(power_steps.sum(), 2)) + " W")
 
-                    self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture, replace=True, legend="Spectral Flux")
-                    if use_filters: self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture_filtered, replace=False, legend="Spectral Flux Filters", color="#006400")
+                    if not use_filters:
+                        self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture, replace=True, legend="Spectral Flux")
+                    else:
+                        self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture, replace=True, linestyle="--", legend="Spectral Flux")
+                        self.spectral_flux_plot.addCurve(energies, flux_through_finite_aperture_filtered, replace=False, legend="Spectral Flux (Filtered)", color="#006400")
                     self.spectral_flux_plot.setGraphXLabel("Energy [eV]")
                     self.spectral_flux_plot.setGraphYLabel("Flux [ph/s/.1%bw]")
                     self.spectral_flux_plot.setGraphTitle("Spectral Flux" + ("" if use_filters else " (Filtered)"))
@@ -597,8 +604,11 @@ class PowerLoopPoint(widget.OWWidget):
                     self.cumulated_power_plot.addCurve(interpolated_energies, interpolated_cumulated_power, replace=False, legend="Energy Binning", color="red", linestyle=" ", symbol="+")
                     self.spectral_flux_plot.addCurve(interpolated_energies, flux_steps, replace=False, legend="Energy Binning", color="red", linestyle=" ", symbol="+")
 
-                    text = ""
+                    self.cumulated_power_plot.getLegendsDockWidget().setVisible(True)
+                    self.spectral_flux_plot.getLegendsDockWidget().setVisible(True)
 
+
+                    text = ""
                     for energy_value, energy_step, power_step in zip(interpolated_energies, energy_steps, power_steps):
                         energy_binning = EnergyBinning(energy_value=round(energy_value, 3),
                                                        energy_step=round(energy_step, 3),
