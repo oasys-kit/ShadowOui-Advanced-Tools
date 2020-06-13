@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # #########################################################################
-# Copyright (c) 2018, UChicago Argonne, LLC. All rights reserved.         #
+# Copyright (c) 2020, UChicago Argonne, LLC. All rights reserved.         #
 #                                                                         #
-# Copyright 2018. UChicago Argonne, LLC. This software was produced       #
+# Copyright 2020. UChicago Argonne, LLC. This software was produced       #
 # under U.S. Government contract DE-AC02-06CH11357 for Argonne National   #
 # Laboratory (ANL), which is operated by UChicago Argonne, LLC for the    #
 # U.S. Department of Energy. The U.S. Government has rights to use,       #
@@ -50,9 +50,8 @@ import sys, numpy, os
 import scipy.constants as codata
 m2ev = codata.c * codata.h / codata.e
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QFont, QColor
-from PyQt5.QtWidgets import QApplication, QMessageBox, QDockWidget
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from orangewidget.widget import OWAction
 from orangewidget import gui
@@ -411,35 +410,35 @@ class PowerLoopPoint(widget.OWWidget):
                     data = exchange_data.get_content("filters_data")
                     write_file = False
                 except:
-                    if not exchange_data.get_program_name() == "XOPPY": raise ValueError("Only XOPPY widgets are accepted")
-                    if not exchange_data.get_widget_name() in ["XF1F2", "POWER", "XCRYSTAL", "MULTILAYER"]: raise ValueError("Only XF1F2, POWER, XCRYSTAL, MULTILAYER widgets are accepted")
+                    if not exchange_data.get_program_name() in ["XOPPY", "ShadowOui_Thermal"]: raise ValueError("Only XOPPY widgets or ShadowOui-Thermal are accepted")
+                    if not exchange_data.get_widget_name() in ["XF1F2", "POWER", "XCRYSTAL", "MULTILAYER", "TOTAL_REFLECTIVITY"]: raise ValueError("Only XF1F2, POWER, XCRYSTAL, MULTILAYER, TOTAL_REFLECTIVITY widgets are accepted")
 
-                    xoppy_data = exchange_data.get_content("xoppy_data")
-
-                    if exchange_data.get_widget_name() == "XF1F2":
-                        data = xoppy_data
+                    if exchange_data.get_widget_name() == "TOTAL_REFLECTIVITY":
+                        data = exchange_data.get_content("total_reflectivity")
+                    elif exchange_data.get_widget_name() in ["XF1F2", "TOTAL_REFLECTIVITY"]:
+                        data = exchange_data.get_content("xoppy_data")
                     else:
-                        energies = xoppy_data[:, 0]
+                        input_data = exchange_data.get_content("xoppy_data")
 
                         if exchange_data.get_widget_name() == "POWER":
-                            data = numpy.zeros((len(energies), 2))
-                            data[:, 0] = energies
-                            data[:, 1] = xoppy_data[:, -1]/xoppy_data[:, 1]
+                            data = numpy.zeros((input_data.shape[0], 2))
+                            data[:, 0] = input_data[:, 0]
+                            data[:, 1] = input_data[:, -1]/input_data[:, 1]
                         else:
                             if exchange_data.get_widget_name() == "XCRYSTAL":
-                                reflectivity_s = xoppy_data[:, 3]
-                                reflectivity_p = xoppy_data[:, 4]
+                                reflectivity_s = input_data[:, 3]
+                                reflectivity_p = input_data[:, 4]
                             elif exchange_data.get_widget_name() == "MULTILAYER":
-                                reflectivity_s = xoppy_data[:, 1]
-                                reflectivity_p = xoppy_data[:, 2]
+                                reflectivity_s = input_data[:, 1]
+                                reflectivity_p = input_data[:, 2]
 
-                            data = numpy.zeros((len(energies), 2))
-                            data[:, 0] = energies
+                            data = numpy.zeros((input_data.shape[0], 2))
+                            data[:, 0] = input_data[:, 0]
                             data[:, 1] = 0.5*(reflectivity_p + reflectivity_s)
 
                 self.filters = data
 
-                energies     = self.filters[:, 0]
+                energies          = self.filters[:, 0]
                 intensity_factors = self.filters[:, 1]
 
                 if write_file:
@@ -662,7 +661,7 @@ class PowerLoopPoint(widget.OWWidget):
             else:
                 energy_binning = self.energy_binnings[self.current_energy_binning]
 
-                self.number_of_new_objects = int((energy_binning.energy_value_to - energy_binning.energy_value) / energy_binning.energy_step)
+                self.number_of_new_objects = int((energy_binning.energy_value_to - energy_binning.energy_value) / energy_binning.energy_nr)
         else:
             self.number_of_new_objects = 0
 
@@ -684,7 +683,7 @@ class PowerLoopPoint(widget.OWWidget):
             self.total_current_new_object = 1
             self.current_energy_binning = 0
             self.current_energy_value             = round(self.energy_binnings[0].energy_value, 8)
-            self.current_energy_step              = round(self.energy_binnings[0].energy_step, 8)
+            self.current_energy_step              = round(self.energy_binnings[0].energy_nr, 8)
             self.current_power_step               = None if self.energy_binnings[0].power_step is None else (None if self.send_power_step==0 else round(self.energy_binnings[0].power_step, 8))
             self.calculate_number_of_new_objects()
 
@@ -766,7 +765,7 @@ class PowerLoopPoint(widget.OWWidget):
                                 self.current_energy_value = round(energy_binning.energy_value, 8)
                             else:
                                 self.current_new_object += 1
-                                self.current_energy_value = round(self.current_energy_value + energy_binning.energy_step, 8)
+                                self.current_energy_value = round(self.current_energy_value + energy_binning.energy_nr, 8)
 
                             self.current_power_step = None if energy_binning.power_step is None else (None if self.send_power_step==0 else round(energy_binning.power_step, 8))
 
@@ -775,7 +774,7 @@ class PowerLoopPoint(widget.OWWidget):
                             self.text_area.setEnabled(False)
                             self.send("Trigger", TriggerOut(new_object=True,
                                                             additional_parameters={"energy_value"   : self.current_energy_value,
-                                                                                   "energy_step"    : energy_binning.energy_step,
+                                                                                   "energy_step"    : energy_binning.energy_nr,
                                                                                    "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
                                                                                    "seed_increment" : self.seed_increment,
                                                                                    "start_event"    : False}))
@@ -795,7 +794,7 @@ class PowerLoopPoint(widget.OWWidget):
                                 self.text_area.setEnabled(False)
                                 self.send("Trigger", TriggerOut(new_object=True,
                                                                 additional_parameters={"energy_value"   : self.current_energy_value,
-                                                                                       "energy_step"    : energy_binning.energy_step,
+                                                                                       "energy_step"    : energy_binning.energy_nr,
                                                                                        "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
                                                                                        "seed_increment" : self.seed_increment,
                                                                                        "start_event"    : False}))
