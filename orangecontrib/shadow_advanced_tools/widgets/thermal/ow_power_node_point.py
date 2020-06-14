@@ -410,12 +410,12 @@ class PowerLoopPoint(widget.OWWidget):
                     data = exchange_data.get_content("filters_data")
                     write_file = False
                 except:
-                    if not exchange_data.get_program_name() in ["XOPPY", "ShadowOui_Thermal"]: raise ValueError("Only XOPPY widgets or ShadowOui-Thermal are accepted")
-                    if not exchange_data.get_widget_name() in ["XF1F2", "POWER", "XCRYSTAL", "MULTILAYER", "TOTAL_REFLECTIVITY"]: raise ValueError("Only XF1F2, POWER, XCRYSTAL, MULTILAYER, TOTAL_REFLECTIVITY widgets are accepted")
+                    if not exchange_data.get_program_name() in ["XOPPY", "ShadowOui_Thermal"]: raise ValueError("Only XOPPY or ShadowOui-Thermal widgets are accepted")
+                    if not exchange_data.get_widget_name() in ["XF1F2", "POWER", "XCRYSTAL", "MULTILAYER", "TOTAL_FILTER"]: raise ValueError("Only XF1F2, POWER, XCRYSTAL, MULTILAYER, Total Filter Calculator widgets are accepted")
 
-                    if exchange_data.get_widget_name() == "TOTAL_REFLECTIVITY":
-                        data = exchange_data.get_content("total_reflectivity")
-                    elif exchange_data.get_widget_name() in ["XF1F2", "TOTAL_REFLECTIVITY"]:
+                    if exchange_data.get_widget_name() == "TOTAL_FILTER":
+                        data = exchange_data.get_content("total_filter")
+                    elif exchange_data.get_widget_name() in ["XF1F2"]:
                         data = exchange_data.get_content("xoppy_data")
                     else:
                         input_data = exchange_data.get_content("xoppy_data")
@@ -426,11 +426,14 @@ class PowerLoopPoint(widget.OWWidget):
                             data[:, 1] = input_data[:, -1]/input_data[:, 1]
                         else:
                             if exchange_data.get_widget_name() == "XCRYSTAL":
-                                reflectivity_s = input_data[:, 3]
-                                reflectivity_p = input_data[:, 4]
+                                reflectivity_s = input_data[:, 5]
+                                reflectivity_p = input_data[:, 6]
                             elif exchange_data.get_widget_name() == "MULTILAYER":
                                 reflectivity_s = input_data[:, 1]
                                 reflectivity_p = input_data[:, 2]
+
+                            reflectivity_s[numpy.where(numpy.isnan(reflectivity_s))] = 0
+                            reflectivity_p[numpy.where(numpy.isnan(reflectivity_p))] = 0
 
                             data = numpy.zeros((input_data.shape[0], 2))
                             data[:, 0] = input_data[:, 0]
