@@ -53,7 +53,7 @@ except AttributeError:
     from setuptools import find_packages, setup
 
 NAME = 'OASYS1-ShadowOui-Advanced-Tools'
-VERSION = '1.0.7'
+VERSION = '1.0.8'
 ISRELEASED = True
 
 DESCRIPTION = 'ShadowOui advanced simulation tools'
@@ -95,6 +95,7 @@ INSTALL_REQUIRES = (
 PACKAGES = find_packages(exclude=('*.tests', '*.tests.*', 'tests.*', 'tests'))
 
 PACKAGE_DATA = {
+    "orangecontrib.shadow_advanced_tools.widgets.sources":["icons/*.png", "icons/*.jpg", "misc/*.png"],
     "orangecontrib.shadow_advanced_tools.widgets.optical_elements":["icons/*.png", "icons/*.jpg", "misc/*.png"],
     "orangecontrib.shadow_advanced_tools.widgets.thermal":["icons/*.png", "icons/*.jpg", "misc/*.png"],
 }
@@ -108,6 +109,7 @@ ENTRY_POINTS = {
     'oasys.addons' : ("Shadow Advanced Tools = orangecontrib.shadow_advanced_tools",
                       ),
     'oasys.widgets' : (
+        "Shadow Advanced Light Sources = orangecontrib.shadow_advanced_tools.widgets.sources",
         "Shadow Advanced Optical Elements = orangecontrib.shadow_advanced_tools.widgets.optical_elements",
         "Shadow Thermal Load = orangecontrib.shadow_advanced_tools.widgets.thermal",
     ),
