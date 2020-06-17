@@ -664,7 +664,7 @@ class PowerLoopPoint(widget.OWWidget):
             else:
                 energy_binning = self.energy_binnings[self.current_energy_binning]
 
-                self.number_of_new_objects = int((energy_binning.energy_value_to - energy_binning.energy_value) / energy_binning.energy_nr)
+                self.number_of_new_objects = int((energy_binning.energy_value_to - energy_binning.energy_value) / energy_binning.energy_step)
         else:
             self.number_of_new_objects = 0
 
@@ -686,7 +686,7 @@ class PowerLoopPoint(widget.OWWidget):
             self.total_current_new_object = 1
             self.current_energy_binning = 0
             self.current_energy_value             = round(self.energy_binnings[0].energy_value, 8)
-            self.current_energy_step              = round(self.energy_binnings[0].energy_nr, 8)
+            self.current_energy_step              = round(self.energy_binnings[0].energy_step, 8)
             self.current_power_step               = None if self.energy_binnings[0].power_step is None else (None if self.send_power_step==0 else round(self.energy_binnings[0].power_step, 8))
             self.calculate_number_of_new_objects()
 
@@ -768,7 +768,7 @@ class PowerLoopPoint(widget.OWWidget):
                                 self.current_energy_value = round(energy_binning.energy_value, 8)
                             else:
                                 self.current_new_object += 1
-                                self.current_energy_value = round(self.current_energy_value + energy_binning.energy_nr, 8)
+                                self.current_energy_value = round(self.current_energy_value + energy_binning.energy_step, 8)
 
                             self.current_power_step = None if energy_binning.power_step is None else (None if self.send_power_step==0 else round(energy_binning.power_step, 8))
 
@@ -777,7 +777,7 @@ class PowerLoopPoint(widget.OWWidget):
                             self.text_area.setEnabled(False)
                             self.send("Trigger", TriggerOut(new_object=True,
                                                             additional_parameters={"energy_value"   : self.current_energy_value,
-                                                                                   "energy_step"    : energy_binning.energy_nr,
+                                                                                   "energy_step"    : energy_binning.energy_step,
                                                                                    "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
                                                                                    "seed_increment" : self.seed_increment,
                                                                                    "start_event"    : False}))
@@ -797,7 +797,7 @@ class PowerLoopPoint(widget.OWWidget):
                                 self.text_area.setEnabled(False)
                                 self.send("Trigger", TriggerOut(new_object=True,
                                                                 additional_parameters={"energy_value"   : self.current_energy_value,
-                                                                                       "energy_step"    : energy_binning.energy_nr,
+                                                                                       "energy_step"    : energy_binning.energy_step,
                                                                                        "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
                                                                                        "seed_increment" : self.seed_increment,
                                                                                        "start_event"    : False}))
