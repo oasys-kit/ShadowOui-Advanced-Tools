@@ -710,18 +710,15 @@ class PowerPlotXY(AutomaticElement):
         return filled*(histogram.sum()/filled.sum())
 
     def save_cumulated_data(self):
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Current Plot", filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt)")
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Current Plot", filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
 
         if not file_name is None and not file_name.strip()=="":
-            items = ("Hdf5 only", "Text only", "Hdf5 and Text")
+            format, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", ("Hdf5", "Text", "Ansys", "All"), 3, False)
 
-            item, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", items, 2, False)
-
-            if ok and item:
-                if item == "Hdf5 only" or item == "Hdf5 and Text":
-                    self.save_cumulated_data_hdf5(file_name)
-                if item == "Text only" or item == "Hdf5 and Text":
-                    self.save_cumulated_data_txt(file_name)
+            if ok and format:
+                if format == "Hdf5" or format == "All":  self.save_cumulated_data_hdf5(file_name)
+                if format == "Text" or format == "All":  self.save_cumulated_data_txt(file_name)
+                if format == "Ansys" or format == "All": self.save_cumulated_data_ansys(file_name)
 
     def save_cumulated_data_hdf5(self, file_name):
         if not self.plotted_ticket is None:
@@ -756,6 +753,35 @@ class PowerPlotXY(AutomaticElement):
 
                 save_file.flush()
                 save_file.close()
+            except Exception as exception:
+                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise exception
+
+    def save_cumulated_data_ansys(self, file_name):
+        if not self.plotted_ticket is None:
+            try:
+                column, ok = QInputDialog.getItem(self, "Ansys File", "Empty column in Ansys axes system", ("x", "y", "z"), 2, False)
+
+                if ok and column:
+                    save_file = open(os.path.splitext(file_name)[0] + ".csv", "w")
+
+                    x_values = self.plotted_ticket["bin_h_center"]
+                    y_values = self.plotted_ticket["bin_v_center"]
+                    z_values = self.plotted_ticket["histogram"]
+
+                    for i in range(x_values.shape[0]):
+                        for j in range(y_values.shape[0]):
+                            if column == "x":   row = "0.0,"                              + str(x_values[i]) + ","  + str(y_values[j]) + "," + str(z_values[i, j])
+                            elif column == "y": row = str(x_values[i])                    + ",0.0,"                 + str(y_values[j]) + "," + str(z_values[i, j])
+                            elif column == "z": row = str(x_values[i]) + ","              + str(y_values[j])        + ",0.0,"                + str(z_values[i, j])
+
+                            if i+j > 0: row = "\n" + row
+
+                            save_file.write(row)
+
+                    save_file.flush()
+                    save_file.close()
             except Exception as exception:
                 QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
 

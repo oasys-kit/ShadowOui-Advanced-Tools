@@ -66,7 +66,10 @@ from oasys.util.oasys_util import TriggerIn, TriggerOut
 from oasys.widgets.exchange import DataExchangeObject
 
 from syned.storage_ring.light_source import LightSource
-from syned.widget.widget_decorator import WidgetDecorator
+#from syned.widget.widget_decorator import WidgetDecorator
+
+AUTOBINNING_FILE = "autobinning.dat"
+FILTERS_FILE     = "filters.dat"
 
 class EnergyBinning(object):
     def __init__(self,
@@ -93,7 +96,7 @@ class PowerLoopPoint(widget.OWWidget):
     category = "User Defined"
     keywords = ["data", "file", "load", "read"]
 
-    inputs = WidgetDecorator.syned_input_data()
+    inputs = []#WidgetDecorator.syned_input_data()
     inputs.append(("Trigger", TriggerIn, "passTrigger"))
     inputs.append(("Energy Spectrum", DataExchangeObject, "acceptEnergySpectrum" ))
     inputs.append(("Filters", DataExchangeObject, "acceptFilters" ))
@@ -124,6 +127,7 @@ class PowerLoopPoint(widget.OWWidget):
 
     send_power_step = Setting(0)
 
+    ''' not used anymore, but...
     electron_energy = Setting(6.0)
     K_vertical = Setting(1.943722)
     K_horizontal = Setting(0.0)
@@ -131,6 +135,11 @@ class PowerLoopPoint(widget.OWWidget):
     number_of_periods = Setting(184)
     theta_x=Setting(0.0)
     theta_z=Setting(0.0)
+    '''
+    load_file_mode        = Setting(1) # automatic
+    skip_rows             = Setting(1)
+    autobinning_file_name = Setting(AUTOBINNING_FILE)
+    filters_file_name     = Setting(FILTERS_FILE)
 
     current_energy_binning = -1
     current_energy_value = None
@@ -201,6 +210,32 @@ class PowerLoopPoint(widget.OWWidget):
 
         tabs = oasysgui.tabWidget(self.controlArea)
         tab_loop = oasysgui.createTabPage(tabs, "Loop Management")
+
+        tab_load = oasysgui.createTabPage(tabs, "Input Files")
+
+        left_box_2 = oasysgui.widgetBox(tab_load, "Input Files Management", addSpace=False, orientation="vertical", width=385, height=560)
+
+        gui.comboBox(left_box_2, self, "load_file_mode", label="Input Files Mode",
+                     items=["Manual", "Automatic"], labelWidth=150,
+                     callback=self.set_LoadFileMode, sendSelectedValue=False, orientation="horizontal")
+
+        self.load_file_mode_box_1 = oasysgui.widgetBox(left_box_2, "", addSpace=False, orientation="vertical", height=100)
+        self.load_file_mode_box_2 = oasysgui.widgetBox(left_box_2, "", addSpace=False, orientation="vertical", height=100)
+
+        gui.separator(self.load_file_mode_box_2)
+        oasysgui.lineEdit(self.load_file_mode_box_1, self, "skip_rows", "Skip Rows", labelWidth=260, valueType=int, orientation="horizontal")
+
+        load_box = oasysgui.widgetBox(self.load_file_mode_box_1, "", addSpace=False, orientation="horizontal", height=30)
+        self.le_autobinning_file_name = oasysgui.lineEdit(load_box, self, "autobinning_file_name", "Energy Spectrum", labelWidth=110, valueType=str, orientation="horizontal")
+        gui.button(load_box, self, "...", callback=self.selectAutobinningFile, width=25)
+
+        load_box = oasysgui.widgetBox(self.load_file_mode_box_1, "", addSpace=False, orientation="horizontal", height=30)
+        self.le_filters_file_name = oasysgui.lineEdit(load_box, self, "filters_file_name", "Filters File", labelWidth=110, valueType=str, orientation="horizontal")
+        gui.button(load_box, self, "...", callback=self.selectFiltersFile, width=25)
+
+        self.set_LoadFileMode()
+
+        ''' not used anymore, but...
         tab_und = oasysgui.createTabPage(tabs, "Undulator")
 
         left_box_2 = oasysgui.widgetBox(tab_und, "Parameters From Syned", addSpace=False, orientation="vertical", width=385, height=560)
@@ -210,6 +245,7 @@ class PowerLoopPoint(widget.OWWidget):
         oasysgui.lineEdit(left_box_2, self, "period_length", "Undulator Period [m]", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
         oasysgui.lineEdit(left_box_2, self, "K_vertical", "K Vertical", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
         oasysgui.lineEdit(left_box_2, self, "K_horizontal", "K Horizontal", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
+        '''
 
         left_box_1 = oasysgui.widgetBox(tab_loop, "", addSpace=False, orientation="vertical", width=385, height=560)
 
@@ -346,13 +382,30 @@ class PowerLoopPoint(widget.OWWidget):
         self.text_area.setReadOnly(self.autobinning>=1)
         self.text_area.setFixedHeight(201 if self.autobinning>=1 else 290)
 
+    def set_LoadFileMode(self):
+        self.load_file_mode_box_1.setVisible(self.load_file_mode==0)
+        self.load_file_mode_box_2.setVisible(self.load_file_mode==1)
+
+    def selectAutobinningFile(self):
+        self.le_autobinning_file_name.setText(oasysgui.selectFileFromDialog(self, self.autobinning_file_name, "Select File", file_extension_filter="Text Files (*.txt *.dat)"))
+
+    def selectFiltersFile(self):
+        self.le_filters_file_name.setText(oasysgui.selectFileFromDialog(self, self.filters_file_name, "Select File", file_extension_filter="Text Files (*.txt *.dat)"))
+
     def read_spectrum_file(self, reset_filters=True):
         try:
+            if self.load_file_mode == 1:
+                autobinning_file_name = AUTOBINNING_FILE
+                skip_rows = 1
+            else:
+                autobinning_file_name  = congruence.checkFile(self.autobinning_file_name)
+                skip_rows              = congruence.checkPositiveNumber(self.skip_rows, "Skip Rows")
+
             if reset_filters:
                 self.filters=None
                 self.filter_plot.clear()
 
-            data = numpy.loadtxt("autobinning.dat", skiprows=1)
+            data = numpy.loadtxt(autobinning_file_name, skiprows=skip_rows)
 
             calculated_data = DataExchangeObject(program_name="ShadowOui", widget_name="PowerLoopPoint")
             calculated_data.add_content("spectrum_data", data)
@@ -368,17 +421,29 @@ class PowerLoopPoint(widget.OWWidget):
 
     def read_spectrum_and_filters_file(self):
         try:
-            data = numpy.loadtxt("filters.dat", skiprows=1)
+            if self.load_file_mode == 1:
+                filter_file_name = FILTERS_FILE
+                skip_rows = 1
+            else:
+                filter_file_name  = congruence.checkFile(self.filters_file_name)
+                skip_rows         = congruence.checkPositiveNumber(self.skip_rows, "Skip Rows")
+
+            data = numpy.loadtxt(filter_file_name, skiprows=skip_rows)
 
             calculated_data = DataExchangeObject(program_name="ShadowOui", widget_name="PowerLoopPoint")
             calculated_data.add_content("filters_data", data)
 
             self.acceptFilters(calculated_data)
-        except Exception:
+        except Exception as e:
             self.filters = None
+
+            QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+            if self.IS_DEVELOP: raise e
 
         self.read_spectrum_file(False)
 
+    ''' not used anymore, but...
     def receive_syned_data(self, data):
         if not data is None:
             try:
@@ -400,12 +465,11 @@ class PowerLoopPoint(widget.OWWidget):
 
     def receive_specific_syned_data(self, data):
         raise NotImplementedError()
+    '''
 
     def acceptFilters(self, exchange_data):
         if not exchange_data is None:
-            try: # FROM XOPPY F1F2
-                write_file = True
-
+            try:
                 try:
                     data = exchange_data.get_content("filters_data")
                     write_file = False
@@ -439,21 +503,25 @@ class PowerLoopPoint(widget.OWWidget):
                             data[:, 0] = input_data[:, 0]
                             data[:, 1] = 0.5*(reflectivity_p + reflectivity_s)
 
+                    write_file = True
+
                 self.filters = data
 
                 energies          = self.filters[:, 0]
                 intensity_factors = self.filters[:, 1]
 
                 if write_file:
-                    file = open("filters.dat", "w")
+                    file = open(FILTERS_FILE, "w")
                     file.write("Energy Filter")
-
 
                     for energy, intensity_factor in zip(energies, intensity_factors):
                         file.write("\n" + str(energy) + " " + str(intensity_factor))
 
                     file.flush()
                     file.close()
+
+                    self.load_file_mode = 1 # back to automatic
+                    self.set_LoadFileMode()
 
                 self.filter_plot.clear()
                 self.filter_plot.addCurve(energies, intensity_factors, replace=True, legend="Intensity Factor")
@@ -480,16 +548,13 @@ class PowerLoopPoint(widget.OWWidget):
     def acceptEnergySpectrum(self, exchange_data):
         if not exchange_data is None:
             try:
-                write_file = True
-
                 try:
                     data = exchange_data.get_content("spectrum_data")
                     write_file = False
                 except:
-                    try:
-                        data = exchange_data.get_content("srw_data")
-                    except:
-                        data = exchange_data.get_content("xoppy_data")
+                    try:    data = exchange_data.get_content("srw_data")
+                    except: data = exchange_data.get_content("xoppy_data")
+                    write_file = True
 
                 self.spectrum_data = data.copy()
 
@@ -503,9 +568,8 @@ class PowerLoopPoint(widget.OWWidget):
                 else:
                     use_filters = False
 
-
                 if write_file:
-                    file = open("autobinning.dat", "w")
+                    file = open(AUTOBINNING_FILE, "w")
                     file.write("Energy Flux")
 
                     for energy, flux in zip(energies, flux_through_finite_aperture):
@@ -513,6 +577,9 @@ class PowerLoopPoint(widget.OWWidget):
 
                     file.flush()
                     file.close()
+
+                    self.load_file_mode = 1 # back to automatic
+                    self.set_LoadFileMode()
 
                 if self.autobinning==0:
                     if write_file: QMessageBox.information(self, "Info", "File autobinning.dat written on working directory, switch to Automatic binning to load it", QMessageBox.Ok)
@@ -608,7 +675,6 @@ class PowerLoopPoint(widget.OWWidget):
 
                     self.cumulated_power_plot.getLegendsDockWidget().setVisible(True)
                     self.spectral_flux_plot.getLegendsDockWidget().setVisible(True)
-
 
                     text = ""
                     for energy_value, energy_step, power_step in zip(interpolated_energies, energy_steps, power_steps):
