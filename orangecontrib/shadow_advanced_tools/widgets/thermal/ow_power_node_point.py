@@ -618,9 +618,11 @@ class PowerLoopPoint(widget.OWWidget):
 
                     good = numpy.where(cumulated_power_binning <= self.auto_perc_total_power*0.01*total_power_binning)
 
-                    energies                     = energies[good]
-                    cumulated_power              = cumulated_power[good]
-                    flux_through_finite_aperture = flux_through_finite_aperture[good]
+                    energies                             = energies[good]
+                    cumulated_power                      = cumulated_power[good]
+                    cumulated_power_binning              = cumulated_power_binning[good]
+                    flux_through_finite_aperture         = flux_through_finite_aperture[good]
+                    flux_through_finite_aperture_binning = flux_through_finite_aperture_binning[good]
 
                     if use_filters:
                         cumulated_power_filtered = cumulated_power_filtered[good]
