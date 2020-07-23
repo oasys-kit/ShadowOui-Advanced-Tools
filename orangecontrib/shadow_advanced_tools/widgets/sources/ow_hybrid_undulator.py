@@ -72,8 +72,11 @@ from syned.beamline.shape import Rectangle
 from srxraylib.util.inverse_method_sampler import Sampler2D
 
 from orangecontrib.shadow.util.shadow_objects import ShadowBeam, ShadowSource
+
+
 from orangecontrib.shadow.widgets.gui.ow_generic_element import GenericElement
 
+from oasys.util.random_distributions import Distribution2D, Grid2D, distribution_from_grid
 from oasys.util.custom_distribution import CustomDistribution
 
 import scipy.constants as codata
@@ -351,8 +354,12 @@ class HybridUndulator(GenericElement):
 
         tabs_srw = oasysgui.tabWidget(self.srw_box)
 
-        gui.comboBox(self.srw_box, self, "kind_of_sampler", label="Random Generator", labelWidth=250,
-                     items=["Simple", "Accurate", "Accurate (SRIO)", ], orientation="horizontal")
+        if self.IS_DEVELOP:
+            gui.comboBox(self.srw_box, self, "kind_of_sampler", label="Random Generator", labelWidth=250,
+                         items=["Simple", "Accurate", "Accurate (SRIO)", ], orientation="horizontal")
+        else:
+            gui.comboBox(self.srw_box, self, "kind_of_sampler", label="Random Generator", labelWidth=250,
+                         items=["Simple", "Accurate"], orientation="horizontal")
 
         gui.comboBox(self.srw_box, self, "save_srw_result", label="Save SRW results", labelWidth=310,
                      items=["No", "Yes"], orientation="horizontal", callback=self.set_SaveFileSRW)
@@ -1424,7 +1431,7 @@ class HybridUndulator(GenericElement):
                                                     coord_z,
                                                     intensity,
                                                     distribution_type=Distribution.POSITION,
-                                                    kind_of_sampler=2,
+                                                    kind_of_sampler=1,
                                                     seed=0):
         if kind_of_sampler == 2:
             s2d = Sampler2D(intensity, coord_x, coord_z)
@@ -1477,8 +1484,6 @@ class HybridUndulator(GenericElement):
 
             dim_x = len(coord_x)
             dim_z = len(coord_z)
-
-            from orangecontrib.aps.util.random_distributions import Distribution2D, Grid2D, distribution_from_grid
 
             grid = Grid2D((dim_x, dim_z))
             grid[..., ...] = intensity.tolist()
