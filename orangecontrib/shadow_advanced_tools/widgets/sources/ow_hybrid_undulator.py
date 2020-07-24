@@ -72,7 +72,7 @@ from syned.beamline.shape import Rectangle
 from srxraylib.util.inverse_method_sampler import Sampler2D
 
 from orangecontrib.shadow.util.shadow_objects import ShadowBeam, ShadowSource
-
+from orangecontrib.shadow.util.shadow_util import ShadowPhysics
 
 from orangecontrib.shadow.widgets.gui.ow_generic_element import GenericElement
 
@@ -201,6 +201,8 @@ class HybridUndulator(GenericElement):
     harmonic_number = Setting(1)
     harmonic_energy = 0.0
     energy=Setting(10000.0)
+    energy_to=Setting(10100.0)
+    energy_points=Setting(10)
 
     polarization = Setting(1)
     coherent_beam = Setting(0)
@@ -290,10 +292,10 @@ class HybridUndulator(GenericElement):
         oasysgui.lineEdit(left_box_1, self, "seed", "Seed", tooltip="Seed (0=clock)", labelWidth=250, valueType=int, orientation="horizontal")
 
         gui.comboBox(left_box_1, self, "use_harmonic", label="Photon Energy Setting",
-                     items=["Harmonic", "Other"], labelWidth=260,
+                     items=["Harmonic", "Other", "Range"], labelWidth=260,
                      callback=self.set_WFUseHarmonic, sendSelectedValue=False, orientation="horizontal")
 
-        self.use_harmonic_box_1 = oasysgui.widgetBox(left_box_1, "", addSpace=False, orientation="vertical", height=50)
+        self.use_harmonic_box_1 = oasysgui.widgetBox(left_box_1, "", addSpace=False, orientation="vertical", height=80)
         oasysgui.lineEdit(self.use_harmonic_box_1, self, "harmonic_number", "Harmonic #", labelWidth=260, valueType=int, orientation="horizontal", callback=self.set_harmonic_energy)
         le_he = oasysgui.lineEdit(self.use_harmonic_box_1, self, "harmonic_energy", "Harmonic Energy", labelWidth=260, valueType=float, orientation="horizontal")
         le_he.setReadOnly(True)
@@ -305,8 +307,13 @@ class HybridUndulator(GenericElement):
         palette.setColor(QPalette.Base, QColor(243, 240, 160))
         le_he.setPalette(palette)
 
-        self.use_harmonic_box_2 = oasysgui.widgetBox(left_box_1, "", addSpace=False, orientation="vertical", height=50)
+        self.use_harmonic_box_2 = oasysgui.widgetBox(left_box_1, "", addSpace=False, orientation="vertical", height=80)
         oasysgui.lineEdit(self.use_harmonic_box_2, self, "energy", "Photon Energy [eV]", labelWidth=260, valueType=float, orientation="horizontal")
+
+        self.use_harmonic_box_3 = oasysgui.widgetBox(left_box_1, "", addSpace=False, orientation="vertical", height=80)
+        oasysgui.lineEdit(self.use_harmonic_box_3, self, "energy", "Photon Energy from [eV]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.use_harmonic_box_3, self, "energy_to", "Photon Energy to [eV]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.use_harmonic_box_3, self, "energy_points", "Nr. of Energy values", labelWidth=260, valueType=int, orientation="horizontal")
 
         self.set_WFUseHarmonic()
 
@@ -443,7 +450,7 @@ class HybridUndulator(GenericElement):
         gui.comboBox(symmetry_v_box, self, "symmetry_vs_longitudinal_position_vertical", label=" ", labelWidth=2,
                      items=["Symmetrical", "Anti-Symmetrical"],
                      sendSelectedValue=False, orientation="horizontal")
-        #gui.button(symmetry_v_box, self, "?", callback=self.open_help, width=12)
+        gui.button(symmetry_v_box, self, "?", callback=self.open_help, width=12)
 
         oasysgui.lineEdit(tab_mach, self, "electron_energy_in_GeV", "Energy [GeV]", labelWidth=260, valueType=float, orientation="horizontal", callback=self.set_harmonic_energy)
         oasysgui.lineEdit(tab_mach, self, "electron_energy_spread", "Energy Spread", labelWidth=260, valueType=float, orientation="horizontal")
@@ -645,7 +652,7 @@ class HybridUndulator(GenericElement):
         self.dataY = 1e3*numpy.linspace(y1, y2, source_dimension_wf_v_slit_points)
 
     def onReceivingInput(self):
-        super(APSUndulator, self).onReceivingInput()
+        super(HybridUndulator, self).onReceivingInput()
 
         self.initializeCumulatedTabs()
 
@@ -711,7 +718,7 @@ class HybridUndulator(GenericElement):
             layout = QVBoxLayout(self)
             label = QLabel("")
 
-            file = os.path.join(resources.package_dirname("orangecontrib.aps.shadow_advanced_tools.widgets.extensions"), "misc", "symmetry.png")
+            file = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.sources"), "misc", "symmetry.png")
 
             label.setPixmap(QPixmap(file))
 
@@ -722,7 +729,7 @@ class HybridUndulator(GenericElement):
             layout.addWidget(bbox)
 
     def open_help(self):
-        dialog = APSUndulator.ShowHelpDialog(parent=self)
+        dialog = HybridUndulator.ShowHelpDialog(parent=self)
         dialog.show()
 
     def set_MagneticField(self):
@@ -760,6 +767,7 @@ class HybridUndulator(GenericElement):
     def set_WFUseHarmonic(self):
         self.use_harmonic_box_1.setVisible(self.use_harmonic==0)
         self.use_harmonic_box_2.setVisible(self.use_harmonic==1)
+        self.use_harmonic_box_3.setVisible(self.use_harmonic==2)
 
         self.set_harmonic_energy()
 
@@ -837,6 +845,8 @@ class HybridUndulator(GenericElement):
                     self.Kv = light_source._magnetic_structure._K_vertical
                     self.undulator_period = light_source._magnetic_structure._period_length
                     self.number_of_periods = light_source._magnetic_structure._number_of_periods
+
+                    self.set_harmonic_energy()
                 else:
                     raise ValueError("Syned data not correct")
             except Exception as exception:
@@ -852,8 +862,6 @@ class HybridUndulator(GenericElement):
     def runShadowSource(self, do_cumulated_calculations=False):
         self.setStatusMessage("")
         self.progressBarInit()
-
-        self.integrated_flux = None
 
         sys.stdout = EmittingStream(textWritten=self.writeStdOut)
 
@@ -886,44 +894,120 @@ class HybridUndulator(GenericElement):
 
             self.progressBarSet(20)
 
-            if self.distribution_source == 0:
-                self.setStatusMessage("Running SRW")
+            if self.use_harmonic == 2:
+                energy_points = int(self.energy_points)
+                x_array = numpy.full(energy_points, None)
+                z_array = numpy.full(energy_points, None)
+                intensity_source_dimension_array = numpy.full(energy_points, None)
+                x_first_array = numpy.full(energy_points, None)
+                z_first_array = numpy.full(energy_points, None)
+                intensity_angular_distribution_array = numpy.full(energy_points, None)
+                integrated_flux_array = numpy.zeros(energy_points)
+                nr_rays_array = numpy.zeros(energy_points)
+                energies = numpy.linspace(self.energy, self.energy_to, energy_points)
+                prog_bars = numpy.linspace(20, 50, energy_points)
 
-                x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, total_power = self.runSRWCalculation(do_cumulated_calculations)
-            elif self.distribution_source == 1:
-                self.setStatusMessage("Loading SRW files")
+                delta_e = energies[1] - energies[0]
 
-                x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution = self.loadSRWFiles()
-            elif self.distribution_source == 2: # ASCII FILES
-                self.setStatusMessage("Loading Ascii files")
+                for energy, i in zip(energies, range(energy_points)):
+                    self.setStatusMessage("Running SRW for energy: " + str(energy))
 
-                x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution = self.loadASCIIFiles()
+                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, _ = self.runSRWCalculation(energy, False)
 
-            beam_out.set_initial_flux(self.integrated_flux)
+                    x_array[i] = x
+                    z_array[i] = z
+                    intensity_source_dimension_array[i] = intensity_source_dimension
+                    x_first_array[i] = x_first
+                    z_first_array[i] = z_first
+                    intensity_angular_distribution_array[i] = intensity_angular_distribution
+                    integrated_flux_array[i] = integrated_flux * delta_e / (0.001 * energy) # switch to BW = energy step
+                    nr_rays_array[i] = self.number_of_rays * integrated_flux_array[i]
 
-            self.progressBarSet(50)
+                    self.progressBarSet(prog_bars[i])
 
-            self.setStatusMessage("Applying new Spatial/Angular Distribution")
+                nr_rays_array /= numpy.sum(integrated_flux_array)
 
-            self.progressBarSet(60)
+                first_index = 0
+                prog_bars = numpy.linspace(50, 80, energy_points)
+                current_seed = 0 if self.seed == 0 else self.seed
+                random.seed(current_seed)
 
-            self.generate_user_defined_distribution_from_srw(beam_out=beam_out,
-                                                             coord_x=x,
-                                                             coord_z=z,
-                                                             intensity=intensity_source_dimension,
-                                                             distribution_type=Distribution.POSITION,
-                                                             kind_of_sampler=self.kind_of_sampler,
-                                                             seed=0 if self.seed==0 else self.seed+1)
+                for energy, i in zip(energies, range(energy_points)):
+                    last_index = min(first_index + int(nr_rays_array[i]), len(beam_out._beam.rays))
 
-            self.progressBarSet(70)
+                    temp_beam = ShadowBeam()
+                    temp_beam._beam.rays = beam_out._beam.rays[first_index:last_index]
 
-            self.generate_user_defined_distribution_from_srw(beam_out=beam_out,
-                                                             coord_x=x_first,
-                                                             coord_z=z_first,
-                                                             intensity=intensity_angular_distribution,
-                                                             distribution_type=Distribution.DIVERGENCE,
-                                                             kind_of_sampler=self.kind_of_sampler,
-                                                             seed=0 if self.seed==0 else self.seed+2)
+                    temp_beam._beam.rays[:, 10] = ShadowPhysics.getShadowKFromEnergy(numpy.random.uniform(energy, energy + delta_e, size=len(temp_beam._beam.rays)))
+
+                    self.setStatusMessage("Applying new Spatial/Angular Distribution for energy: " + str(energy))
+
+                    self.generate_user_defined_distribution_from_srw(beam_out=temp_beam,
+                                                                     coord_x=x_array[i],
+                                                                     coord_z=z_array[i],
+                                                                     intensity=intensity_source_dimension_array[i],
+                                                                     distribution_type=Distribution.POSITION,
+                                                                     kind_of_sampler=self.kind_of_sampler,
+                                                                     seed=current_seed + 1)
+
+                    self.generate_user_defined_distribution_from_srw(beam_out=temp_beam,
+                                                                     coord_x=x_first_array[i],
+                                                                     coord_z=z_first_array[i],
+                                                                     intensity=intensity_angular_distribution_array[i],
+                                                                     distribution_type=Distribution.DIVERGENCE,
+                                                                     kind_of_sampler=self.kind_of_sampler,
+                                                                     seed=current_seed + 2)
+
+                    self.progressBarSet(prog_bars[i])
+                    current_seed += 2
+                    first_index = last_index
+
+                if not last_index == len(beam_out._beam.rays):
+                    excluded_rays = beam_out._beam.rays[last_index:]
+                    excluded_rays[:, 9] = -999
+
+                beam_out.set_initial_flux(None)
+            else:
+                integrated_flux = None
+
+                if self.distribution_source == 0:
+                    self.setStatusMessage("Running SRW")
+
+                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power = self.runSRWCalculation(self.energy, do_cumulated_calculations)
+                elif self.distribution_source == 1:
+                    self.setStatusMessage("Loading SRW files")
+
+                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution = self.loadSRWFiles()
+                elif self.distribution_source == 2: # ASCII FILES
+                    self.setStatusMessage("Loading Ascii files")
+
+                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution = self.loadASCIIFiles()
+
+                beam_out.set_initial_flux(integrated_flux)
+
+                self.progressBarSet(50)
+
+                self.setStatusMessage("Applying new Spatial/Angular Distribution")
+
+                self.progressBarSet(60)
+
+                self.generate_user_defined_distribution_from_srw(beam_out=beam_out,
+                                                                 coord_x=x,
+                                                                 coord_z=z,
+                                                                 intensity=intensity_source_dimension,
+                                                                 distribution_type=Distribution.POSITION,
+                                                                 kind_of_sampler=self.kind_of_sampler,
+                                                                 seed=0 if self.seed==0 else self.seed+1)
+
+                self.progressBarSet(70)
+
+                self.generate_user_defined_distribution_from_srw(beam_out=beam_out,
+                                                                 coord_x=x_first,
+                                                                 coord_z=z_first,
+                                                                 intensity=intensity_angular_distribution,
+                                                                 distribution_type=Distribution.DIVERGENCE,
+                                                                 kind_of_sampler=self.kind_of_sampler,
+                                                                 seed=0 if self.seed==0 else self.seed+2)
 
             self.setStatusMessage("Plotting Results")
 
@@ -940,6 +1024,9 @@ class HybridUndulator(GenericElement):
                 additional_parameters["photon_energy_step"] = self.energy_step
 
                 beam_out.setScanningData(ShadowBeam.ScanningData("photon_energy", self.energy, "Energy for Power Calculation", "eV", additional_parameters))
+
+            if self.file_to_write_out > 0:
+                beam_out._beam.write("begin.dat")
 
             self.send("Beam", beam_out)
         except Exception as exception:
@@ -997,8 +1084,15 @@ class HybridUndulator(GenericElement):
             if self.distribution_source != 0: raise Exception("Harmonic Energy can be computed only for explicit SRW Calculation")
 
             self.harmonic_number = congruence.checkStrictlyPositiveNumber(self.harmonic_number, "Harmonic Number")
+        elif self.use_harmonic == 2:
+            if self.distribution_source != 0: raise Exception("Energy Range can be computed only for explicit SRW Calculation")
+
+            self.energy        = congruence.checkStrictlyPositiveNumber(self.energy, "Photon Energy From")
+            self.energy_to     = congruence.checkStrictlyPositiveNumber(self.energy_to, "Photon Energy To")
+            self.energy_points = congruence.checkStrictlyPositiveNumber(self.energy_points, "Nr. Energy Values")
+            congruence.checkGreaterThan(self.energy_to, self.energy, "Photon Energy To", "Photon Energy From")
         else:
-            self.energy = congruence.checkPositiveNumber(self.energy, "Photon Energy")
+            self.energy = congruence.checkStrictlyPositiveNumber(self.energy, "Photon Energy")
 
         if self.optimize_source > 0:
             self.max_number_of_rejected_rays = congruence.checkPositiveNumber(self.max_number_of_rejected_rays,
@@ -1261,7 +1355,7 @@ class HybridUndulator(GenericElement):
         elif direction=="v": return source_dimension_wf_v_slit_points, source_dimension_wf_v_slit_gap
         else:                return source_dimension_wf_h_slit_points, source_dimension_wf_h_slit_gap, source_dimension_wf_v_slit_points, source_dimension_wf_v_slit_gap
 
-    def createInitialWavefrontMesh(self, elecBeam):
+    def createInitialWavefrontMesh(self, elecBeam, energy):
         #****************** Initial Wavefront
         wfr = SRWLWfr() #For intensity distribution at fixed photon energy
 
@@ -1272,7 +1366,7 @@ class HybridUndulator(GenericElement):
 
         wfr.allocate(1, source_dimension_wf_h_slit_points, source_dimension_wf_v_slit_points) #Numbers of points vs Photon Energy, Horizontal and Vertical Positions
         wfr.mesh.zStart = self.source_dimension_wf_distance - self.longitudinal_central_position #Longitudinal Position [m] from Center of Straight Section at which SR has to be calculated
-        wfr.mesh.eStart = self.energy if self.use_harmonic==1 else self.resonance_energy(harmonic=self.harmonic_number)  #Initial Photon Energy [eV]
+        wfr.mesh.eStart = energy  #Initial Photon Energy [eV]
         wfr.mesh.eFin = wfr.mesh.eStart #Final Photon Energy [eV]
 
         wfr.mesh.xStart = -0.5*source_dimension_wf_h_slit_gap #Initial Horizontal Position [m]
@@ -1337,13 +1431,13 @@ class HybridUndulator(GenericElement):
         return h_array, v_array, intensity_array
 
 
-    def runSRWCalculation(self, do_cumulated_calculations=False):
+    def runSRWCalculation(self, energy, do_cumulated_calculations=False):
 
         self.checkSRWFields()
 
         magFldCnt = self.createUndulator()
         elecBeam = self.createElectronBeam(distribution_type=Distribution.DIVERGENCE)
-        wfr = self.createInitialWavefrontMesh(elecBeam)
+        wfr = self.createInitialWavefrontMesh(elecBeam, energy)
 
         arPrecParSpec = self.createCalculationPrecisionSettings()
 
@@ -1366,16 +1460,16 @@ class HybridUndulator(GenericElement):
         dx = (x[1] - x[0]) * 1e3  # mm for power computations
         dy = (z[1] - z[0]) * 1e3
 
-        self.integrated_flux = intensity_angular_distribution.sum()*dx*dy
+        integrated_flux = intensity_angular_distribution.sum()*dx*dy
 
         if self.compute_power:
-            total_power = self.power_step if self.power_step > 0 else self.integrated_flux * (1e3 * self.energy_step * codata.e)
+            total_power = self.power_step if self.power_step > 0 else integrated_flux * (1e3 * self.energy_step * codata.e)
         else:
             total_power = None
 
         if self.compute_power and do_cumulated_calculations:
-            current_energy          = numpy.ones(1) * self.energy
-            current_integrated_flux = numpy.ones(1) * self.integrated_flux
+            current_energy          = numpy.ones(1) * energy
+            current_integrated_flux = numpy.ones(1) * integrated_flux
             current_power_density   = intensity_angular_distribution.copy() * (1e3 * self.energy_step * codata.e)
             current_power           = total_power
 
@@ -1395,7 +1489,7 @@ class HybridUndulator(GenericElement):
         x_first = numpy.arctan(x/distance)
         z_first = numpy.arctan(z/distance)
 
-        wfrAngDist = self.createInitialWavefrontMesh(elecBeam)
+        wfrAngDist = self.createInitialWavefrontMesh(elecBeam, energy)
         wfrAngDist.mesh.xStart = numpy.arctan(wfr.mesh.xStart/distance)
         wfrAngDist.mesh.xFin   = numpy.arctan(wfr.mesh.xFin  /distance)
         wfrAngDist.mesh.yStart = numpy.arctan(wfr.mesh.yStart/distance)
@@ -1405,7 +1499,7 @@ class HybridUndulator(GenericElement):
 
         # for source dimension, back propagation to the source central position
         elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION)
-        wfr         = self.createInitialWavefrontMesh(elecBeam)
+        wfr         = self.createInitialWavefrontMesh(elecBeam, energy)
         optBLSouDim = self.createBeamlineSourceDimension(wfr)
 
         srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
@@ -1422,7 +1516,7 @@ class HybridUndulator(GenericElement):
         x /= self.workspace_units_to_m
         z /= self.workspace_units_to_m
 
-        return x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, total_power
+        return x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power
 
 
     def generate_user_defined_distribution_from_srw(self,
