@@ -245,9 +245,9 @@ class ZonePlateSimulator(object):
         # Definition of the position where the calculated input and transformed
         # functions are evaluated. We define also the maximum frequency in the
         # angular domain.
-        Q = c[self.n_points] / (2 * numpy.pi * self.max_radius)  # Maximum frequency
+        q_max = c[self.n_points] / (2 * numpy.pi * self.max_radius) # Maximum frequency
         r = c[:self.n_points] * self.max_radius / c[self.n_points]  # Radius vector
-        q = c[:self.n_points] / (2 * numpy.pi * self.max_radius)  # Frequency vector
+        q = c[:self.n_points] / (2 * numpy.pi * self.max_radius)    # Frequency vector
 
         # Recalculation of the position where the initial profile is defined.
         profile_h = self.__get_profile_h(profile, r)
@@ -264,16 +264,14 @@ class ZonePlateSimulator(object):
         four0 = hankel_transform(field0, self.max_radius, c)
         field0 = profile_h
 
-        if op.with_multi_slicing: four0 = self.__propagate_multislicing(map_int, map_complex, field0, four0, Q, q, c)
+        if op.with_multi_slicing: four0 = self.__propagate_multislicing(map_int, map_complex, field0, four0, q_max, q, c)
 
         if op.with_range:
-            self.__propagate_on_range(map_int, map_complex, four0, Q, q, c)
+            self.__propagate_on_range(map_int, map_complex, four0, q_max, q, c)
         else:
-            self.__propagate_to_focus(map_int, map_complex, four0, Q, q, c)
+            self.__propagate_to_focus(map_int, map_complex, four0, q_max, q, c)
 
-        map_index = self.n_slices
-
-        efficiency = self.__calculate_efficiency(map_index, map_int, profile_h, r, int(numpy.floor(10 * at.b_min / self.step)))
+        efficiency = self.__calculate_efficiency(-1, map_int, profile_h, r, int(numpy.floor(10 * at.b_min / self.step)))
 
         return map_int, map_complex, efficiency
 
@@ -532,14 +530,14 @@ class ZonePlateSimulator(object):
 
     ###################################################
     #
-    def __propagate_multislicing(self, map_int, map_complex, field0, four0, Q, q, c):
+    def __propagate_multislicing(self, map_int, map_complex, field0, four0, q_max, q, c):
         step_slice = self.__attributes.height
 
         for n in range(self.n_slices - 1):
             proj = numpy.exp(-1j * step_slice * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
 
             fun = numpy.multiply(proj, four0)
-            field = hankel_transform(fun, Q, c)
+            field = hankel_transform(fun, q_max, c)
             fun = numpy.multiply(field0, field)
 
             map_int[1 + n, :] = numpy.multiply(numpy.abs(fun), numpy.abs(fun))
@@ -551,23 +549,23 @@ class ZonePlateSimulator(object):
 
     ###################################################
     #
-    def __propagate_to_focus(self, map_int, map_complex, four0, Q, q, c):
+    def __propagate_to_focus(self, map_int, map_complex, four0, q_max, q, c):
         op = self.__options
 
         if not op.with_order_sorting_aperture:
-            self.__propagate_to_distance(map_int, map_complex, self.focal_distance, four0, Q, q, c)
+            self.__propagate_to_distance(map_int, map_complex, self.focal_distance, four0, q_max, q, c)
         else:
             # Propagation to OSA position and OSA insertion
             # --------------------------------------------------------------------------
-            four_OSA = self.__propagate_to_OSA(four0, Q, q, c)
+            four_OSA = self.__propagate_to_OSA(four0, q_max, q, c)
 
             # Propagation at the focus position
             # --------------------------------------------------------------------------
-            self.__propagate_to_distance(map_int, map_complex, self.focal_distance - op.osa_position, four_OSA, Q, q, c)
+            self.__propagate_to_distance(map_int, map_complex, self.focal_distance - op.osa_position, four_OSA, q_max, q, c)
 
     ###################################################
     #
-    def __propagate_on_range(self, map_int, map_complex, four0, Q, q, c):
+    def __propagate_on_range(self, map_int, map_complex, four0, q_max, q, c):
         op = self.__options
 
         stepz = (op.range_f - op.range_i) / (op.n_z - 1)
@@ -575,17 +573,17 @@ class ZonePlateSimulator(object):
 
         if not op.with_order_sorting_aperture:
             for o in range(op.n_z):
-                self.__propagate_to_distance(map_int, map_complex, z[o], four0, Q, q, c, index=o)
+                self.__propagate_to_distance(map_int, map_complex, z[o], four0, q_max, q, c, map_index=o)
         else:
             if op.osa_position < op.range_i:
                 # Propagation to OSA position and OSA insertion
                 # --------------------------------------------------------------------------
-                four_OSA = self.__propagate_to_OSA(four0, Q, q, c)
+                four_OSA = self.__propagate_to_OSA(four0, q_max, q, c)
 
                 # Continue the propagation from OSA on the range
                 #--------------------------------------------------------------------------
                 for o in range(op.n_z):
-                    self.__propagate_to_distance(map_int, map_complex, z[o] - op.osa_position, four_OSA, Q, q, c, index=o)
+                    self.__propagate_to_distance(map_int, map_complex, z[o] - op.osa_position, four_OSA, q_max, q, c, map_index=o)
             else:
                 z_before = z[numpy.where(z <= op.osa_position)]
                 last_before = len(z_before)
@@ -593,32 +591,32 @@ class ZonePlateSimulator(object):
                 # Propagation from initial position to last position before OSA
                 # ------------------------------------------------------------------
                 for o in range(last_before):
-                    self.__propagate_to_distance(map_int, map_complex, z_before[o], four0, Q, q, c, index=o)
+                    self.__propagate_to_distance(map_int, map_complex, z_before[o], four0, q_max, q, c, map_index=o)
 
                 # Propagation to OSA position and OSA insertion
                 # --------------------------------------------------------------------------
-                four_OSA = self.__propagate_to_OSA(four0, Q, q, c)
+                four_OSA = self.__propagate_to_OSA(four0, q_max, q, c)
 
                 # Continue the propagation from first position after OSA to final position
                 #--------------------------------------------------------------------------
                 for o in range(last_before, op.n_z):
-                    self.__propagate_to_distance(map_int, map_complex, z[o] - op.osa_position, four_OSA, Q, q, c, index=o)
+                    self.__propagate_to_distance(map_int, map_complex, z[o] - op.osa_position, four_OSA, q_max, q, c, map_index=o)
 
     ###################################################
     #
-    def __propagate_to_distance(self, map_int, map_complex, z, four0, Q, q, c, index=0):
+    def __propagate_to_distance(self, map_int, map_complex, z, four0, q_max, q, c, map_index=0):
         print("Propagation to distance: ", z, " m")
 
         proj = numpy.exp(-1j * z * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
         fun = numpy.multiply(proj, four0)
-        four11 = hankel_transform(fun, Q, c)
+        four11 = hankel_transform(fun, q_max, c)
 
-        map_int[index + self.n_slices, :] = numpy.multiply(numpy.abs(four11), numpy.abs(four11))
-        map_complex[index + self.n_slices, :] = four11
+        map_int[map_index + self.n_slices, :] = numpy.multiply(numpy.abs(four11), numpy.abs(four11))
+        map_complex[map_index + self.n_slices, :] = four11
 
     ###################################################
     #
-    def __propagate_to_OSA(self, four0, Q, q, c):
+    def __propagate_to_OSA(self, four0, q_max, q, c):
         op = self.__options
 
         print("Propagation to OSA: ", op.osa_position, " m")
@@ -626,7 +624,7 @@ class ZonePlateSimulator(object):
         # --------------------------------------------------------------------------
         proj_OSA = numpy.exp(-1j * op.osa_position * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
         fun = numpy.multiply(proj_OSA, four0)
-        field_OSA = hankel_transform(fun, Q, c)
+        field_OSA = hankel_transform(fun, q_max, c)
 
         # Inserting OSA
         # --------------------------------------------------------------------------
