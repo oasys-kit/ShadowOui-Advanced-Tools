@@ -23,7 +23,7 @@ COLLIMATED_SOURCE_LIMIT = 1e4 #m
 
 class FresnelZonePlate(GenericElement):
 
-    name = "Fresnel Zone Plate"
+    name = "Fresnel Zone Plate (Beta)"
     description = "Shadow OE: Fresnel Zone Plate"
     icon = "icons/zone_plate.png"
     maintainer = "Luca Rebuffi"
