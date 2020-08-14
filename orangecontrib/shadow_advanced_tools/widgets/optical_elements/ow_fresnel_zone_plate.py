@@ -60,8 +60,42 @@ class FresnelZonePlate(GenericElement):
     source_plane_distance = Setting(10.0)
     image_plane_distance = Setting(20.0)
 
+    height = Setting(20.0) # um
+    diameter = Setting(50.0) # um
+    b_min = Setting(50.0) # nm
+    zone_plate_material = Setting('Au')
+    template_material = Setting('SiO2')
+
+    zone_plate_type = Setting(0)
+    width_coating = Setting(20) # nm
+    height1_factor = Setting(0.33)
+    height2_factor = Setting(0.67)
+
+    with_central_stop = Setting(0)
+    cs_diameter = Setting(10.0) # um
+
+    with_order_sorting_aperture = Setting(0)
+
+    osa_position = Setting(10.0) # user units
+    osa_diameter =  Setting(30.0) # um
+
     source_distance_flag = Setting(0)
     source_distance = Setting(0.0)
+
+    image_distance_flag = Setting(1)
+
+    with_multi_slicing = Setting(0)
+    n_slices = Setting(100)
+
+    n_points = Setting(5000)
+    last_index = Setting(100)
+
+    ##################################################
+
+    avg_energy = 0.0
+    number_of_zones = 0
+    focal_distance = 0.0
+    efficiency = 0.0
 
     ##################################################
 
@@ -149,12 +183,60 @@ class FresnelZonePlate(GenericElement):
         tabs_setting.setFixedHeight(self.TABS_AREA_HEIGHT-5)
         tabs_setting.setFixedWidth(self.CONTROL_AREA_WIDTH-5)
 
-        tab_zone_plate_1 = oasysgui.createTabPage(tabs_basic_setting, "Zone Plate Input Parameters")
-        tab_zone_plate_2 = oasysgui.createTabPage(tabs_basic_setting, "Zone Plate Output Parameters")
+        tab_zone_plate_1 = oasysgui.createTabPage(tabs_basic_setting, "Input Parameters")
+        tab_zone_plate_2 = oasysgui.createTabPage(tabs_basic_setting, "Propagation Parameters")
+        tab_zone_plate_3 = oasysgui.createTabPage(tabs_basic_setting, "Output Parameters")
 
-        zp_box = oasysgui.widgetBox(tab_zone_plate_1, "Input Parameters", addSpace=False, orientation="vertical", height=290)
+        zp_box = oasysgui.widgetBox(tab_zone_plate_1, "F.Z.P. Parameters", addSpace=False, orientation="vertical", height=475)
 
+        oasysgui.lineEdit(zp_box, self, "b_min",  "Outermost Zone Width/Period [nm]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(zp_box, self, "diameter", "F.Z.P. Diameter [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(zp_box, self, "height",  "F.Z.P. Height [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
 
+        gui.comboBox(zp_box, self, "zone_plate_type", label="Type of F.Z.P.", labelWidth=350,
+                     items=["Ordinary", "Zone-Doubled", "Zone-Filled", "Two-Level"],
+                     callback=self.set_FZPType, sendSelectedValue=False, orientation="horizontal")
+
+        oasysgui.lineEdit(zp_box, self, "zone_plate_material",  "F.Z.P. Material", labelWidth=160, valueType=str, orientation="horizontal")
+
+        self.ord_box = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
+
+        self.zd_box = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
+        oasysgui.lineEdit(self.zd_box, self, "template_material",  "Template Material", labelWidth=160, valueType=str, orientation="horizontal")
+        oasysgui.lineEdit(self.zd_box, self, "width_coating",  "Coating Width [nm]", labelWidth=260, valueType=float, orientation="horizontal")
+
+        self.zf_box = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
+        oasysgui.lineEdit(self.zf_box, self, "template_material", "Template Material", labelWidth=160, valueType=str, orientation="horizontal")
+        oasysgui.lineEdit(self.zf_box, self, "width_coating", "Coating Width [nm]", labelWidth=260, valueType=float, orientation="horizontal")
+
+        self.tl_box = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
+        oasysgui.lineEdit(self.tl_box, self, "height1_factor",  "Height Factor 1", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.tl_box, self, "height2_factor",  "Height Factor 2", labelWidth=260, valueType=float, orientation="horizontal")
+
+        self.set_FZPType()
+
+        gui.comboBox(zp_box, self, "with_central_stop", label="With Central Stop", labelWidth=350,
+                     items=["No", "Yes"],
+                     callback=self.set_WithCentralStop, sendSelectedValue=False, orientation="horizontal")
+
+        self.cs_box_1 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
+        self.cs_box_2 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
+
+        oasysgui.lineEdit(self.cs_box_1, self, "cs_diameter", "C.S. Diameter [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
+
+        self.set_WithCentralStop()
+
+        gui.comboBox(zp_box, self, "with_order_sorting_aperture", label="With Order Sorting Aperture", labelWidth=350,
+                     items=["No", "Yes"],
+                     callback=self.set_WithOrderSortingAperture, sendSelectedValue=False, orientation="horizontal")
+
+        self.osa_box_1 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
+        self.osa_box_2 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
+
+        self.le_osa_position = oasysgui.lineEdit(self.osa_box_1, self, "osa_position", "O.S.A. position ", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.osa_box_1, self, "osa_diameter", "O.S.A. Diameter [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
+
+        self.set_WithOrderSortingAperture()
 
         gui.comboBox(zp_box, self, "source_distance_flag", label="Source Distance", labelWidth=350,
                      items=["Same as Source Plane", "Different"],
@@ -163,44 +245,37 @@ class FresnelZonePlate(GenericElement):
         self.zp_box_1 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
         self.zp_box_2 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
 
-        self.le_source_distance = oasysgui.lineEdit(self.zp_box_1, self, "source_distance", "Source Distance", labelWidth=260, valueType=float, orientation="horizontal")
 
-        self.set_SourceDistanceFlag()
-
-
-        '''
-        oasysgui.lineEdit(zp_box, self, "delta_rn",  u"\u03B4" + "rn [nm]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(zp_box, self, "diameter", "Z.P. Diameter [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
-
-        gui.comboBox(zp_box, self, "source_distance_flag", label="Source Distance", labelWidth=350,
-                     items=["Same as Source Plane", "Different"],
-                     callback=self.set_SourceDistanceFlag, sendSelectedValue=False, orientation="horizontal")
-
-        self.zp_box_1 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
-        self.zp_box_2 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
 
         self.le_source_distance = oasysgui.lineEdit(self.zp_box_1, self, "source_distance", "Source Distance", labelWidth=260, valueType=float, orientation="horizontal")
 
         self.set_SourceDistanceFlag()
 
-        gui.comboBox(zp_box, self, "type_of_zp", label="Type of Zone Plate", labelWidth=350,
-                     items=["Amplitude", "Phase"],
-                     callback=self.set_TypeOfZP, sendSelectedValue=False, orientation="horizontal")
+        gui.comboBox(zp_box, self, "image_distance_flag", label="Image Distance", labelWidth=350,
+                     items=["Image Plane Distance", "Z.P. Focal Distance"],
+                     callback=self.set_ImageDistanceFlag, sendSelectedValue=False, orientation="horizontal")
 
-        gui.separator(zp_box, height=5)
+        self.set_ImageDistanceFlag()
 
-        self.zp_box_3 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical")
+        prop_box = oasysgui.widgetBox(tab_zone_plate_2, "Propagation Parameters", addSpace=False, orientation="vertical", height=270)
 
-        oasysgui.lineEdit(self.zp_box_3, self, "zone_plate_material",  "Zone Plate Material", labelWidth=260, valueType=str, orientation="horizontal")
-        oasysgui.lineEdit(self.zp_box_3, self, "zone_plate_thickness",  "Zone Plate Thickness [nm]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(self.zp_box_3, self, "substrate_material", "Substrate Material", labelWidth=260, valueType=str, orientation="horizontal")
-        oasysgui.lineEdit(self.zp_box_3, self, "substrate_thickness",  "Substrate Thickness [nm]", labelWidth=260, valueType=float, orientation="horizontal")
+        gui.comboBox(prop_box, self, "with_multi_slicing", label="With Multislicing", labelWidth=350,
+                     items=["No", "Yes"],
+                     callback=self.set_WithMultislicing, sendSelectedValue=False, orientation="horizontal")
 
-        self.set_TypeOfZP()
+        self.ms_box_1 = oasysgui.widgetBox(prop_box, "", addSpace=False, orientation="vertical", height=30)
+        self.ms_box_2 = oasysgui.widgetBox(prop_box, "", addSpace=False, orientation="vertical", height=30)
 
-        zp_out_box = oasysgui.widgetBox(tab_zone_plate_2, "Output Parameters", addSpace=False, orientation="vertical", height=270)
+        oasysgui.lineEdit(self.ms_box_1, self, "n_slices", "Nr. Slices", labelWidth=260, valueType=int, orientation="horizontal")
 
-        self.le_avg_wavelength = oasysgui.lineEdit(zp_out_box, self, "avg_wavelength", "Average Wavelenght [nm]", labelWidth=260, valueType=float, orientation="horizontal")
+        self.set_WithMultislicing()
+
+        oasysgui.lineEdit(prop_box, self, "n_points", "Nr. Sampling Points", labelWidth=260, valueType=int, orientation="horizontal")
+        oasysgui.lineEdit(prop_box, self, "last_index", "Last Index of Focal Image", labelWidth=260, valueType=int, orientation="horizontal")
+
+        zp_out_box = oasysgui.widgetBox(tab_zone_plate_3, "Output Parameters", addSpace=False, orientation="vertical", height=270)
+
+        self.le_avg_wavelength = oasysgui.lineEdit(zp_out_box, self, "avg_energy", "Average Energy [eV]", labelWidth=260, valueType=float, orientation="horizontal")
         self.le_avg_wavelength.setReadOnly(True)
         font = QFont(self.le_avg_wavelength.font())
         font.setBold(True)
@@ -230,26 +305,6 @@ class FresnelZonePlate(GenericElement):
         palette.setColor(QPalette.Base, QColor(243, 240, 160))
         self.le_focal_distance.setPalette(palette)
 
-        self.le_image_position = oasysgui.lineEdit(zp_out_box, self, "image_position", "Image Position (Q)", labelWidth=260, valueType=float, orientation="horizontal")
-        self.le_image_position.setReadOnly(True)
-        font = QFont(self.le_image_position.font())
-        font.setBold(True)
-        self.le_image_position.setFont(font)
-        palette = QPalette(self.le_image_position.palette()) # make a copy of the palette
-        palette.setColor(QPalette.Text, QColor('dark blue'))
-        palette.setColor(QPalette.Base, QColor(243, 240, 160))
-        self.le_image_position.setPalette(palette)
-
-        self.le_magnification = oasysgui.lineEdit(zp_out_box, self, "magnification", "Magnification", labelWidth=260, valueType=float, orientation="horizontal")
-        self.le_magnification.setReadOnly(True)
-        font = QFont(self.le_magnification.font())
-        font.setBold(True)
-        self.le_magnification.setFont(font)
-        palette = QPalette(self.le_magnification.palette()) # make a copy of the palette
-        palette.setColor(QPalette.Text, QColor('dark blue'))
-        palette.setColor(QPalette.Base, QColor(243, 240, 160))
-        self.le_magnification.setPalette(palette)
-
         self.le_efficiency = oasysgui.lineEdit(zp_out_box, self, "efficiency", "Efficiency % (Avg. Wavelength)", labelWidth=260, valueType=float, orientation="horizontal")
         self.le_efficiency.setReadOnly(True)
         font = QFont(self.le_efficiency.font())
@@ -260,54 +315,6 @@ class FresnelZonePlate(GenericElement):
         palette.setColor(QPalette.Base, QColor(243, 240, 160))
         self.le_efficiency.setPalette(palette)
 
-        self.le_max_efficiency = oasysgui.lineEdit(zp_out_box, self, "max_efficiency", "Max Possible Efficiency %", labelWidth=260, valueType=float, orientation="horizontal")
-        self.le_max_efficiency.setReadOnly(True)
-        font = QFont(self.le_max_efficiency.font())
-        font.setBold(True)
-        self.le_max_efficiency.setFont(font)
-        palette = QPalette(self.le_max_efficiency.palette()) # make a copy of the palette
-        palette.setColor(QPalette.Text, QColor('dark blue'))
-        palette.setColor(QPalette.Base, QColor(243, 240, 160))
-        self.le_max_efficiency.setPalette(palette)
-
-        self.le_thickness_max_efficiency = oasysgui.lineEdit(zp_out_box, self, "thickness_max_efficiency", "Max Efficiency Thickness [nm]", labelWidth=260, valueType=float, orientation="horizontal")
-        self.le_thickness_max_efficiency.setReadOnly(True)
-        font = QFont(self.le_thickness_max_efficiency.font())
-        font.setBold(True)
-        self.le_thickness_max_efficiency.setFont(font)
-        palette = QPalette(self.le_thickness_max_efficiency.palette()) # make a copy of the palette
-        palette.setColor(QPalette.Text, QColor('dark blue'))
-        palette.setColor(QPalette.Base, QColor(243, 240, 160))
-        self.le_thickness_max_efficiency.setPalette(palette)
-
-        gui.comboBox(zp_out_box, self, "automatically_set_image_plane", label="Automatically set Image Plane Distance", labelWidth=350,
-                     items=["No", "Yes"], sendSelectedValue=False, orientation="horizontal")
-
-        zp_out_box_2 = oasysgui.widgetBox(tab_zone_plate_2, "Efficiency Plot", addSpace=False, orientation="vertical", height=200)
-
-        gui.comboBox(zp_out_box_2, self, "energy_plot", label="Plot Efficiency vs. Energy", labelWidth=350,
-                     items=["No", "Yes"],
-                     sendSelectedValue=False, orientation="horizontal", callback=self.set_EnergyPlot)
-
-        self.zp_out_box_2_1 = oasysgui.widgetBox(zp_out_box_2, "", addSpace=False, orientation="vertical", height=50)
-        self.zp_out_box_2_2 = oasysgui.widgetBox(zp_out_box_2, "", addSpace=False, orientation="vertical", height=50)
-
-        oasysgui.lineEdit(self.zp_out_box_2_1, self, "energy_from",  "Energy From [eV]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(self.zp_out_box_2_1, self, "energy_to",  "Energy To [eV]", labelWidth=260, valueType=float, orientation="horizontal")
-
-        gui.comboBox(zp_out_box_2, self, "thickness_plot", label="Plot Efficiency vs. Thickness", labelWidth=350,
-                     items=["No", "Yes"],
-                     sendSelectedValue=False, orientation="horizontal", callback=self.set_ThicknessPlot)
-
-        self.zp_out_box_2_3 = oasysgui.widgetBox(zp_out_box_2, "", addSpace=False, orientation="vertical", height=50)
-        self.zp_out_box_2_4 = oasysgui.widgetBox(zp_out_box_2, "", addSpace=False, orientation="vertical", height=50)
-
-        oasysgui.lineEdit(self.zp_out_box_2_3, self, "thickness_from",  "Thickness From [nm]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(self.zp_out_box_2_3, self, "thickness_to",  "Thickness To [nm]", labelWidth=260, valueType=float, orientation="horizontal")
-
-        self.set_EnergyPlot()
-        self.set_ThicknessPlot()
-        '''
 
         ##########################################
         ##########################################
@@ -320,7 +327,6 @@ class FresnelZonePlate(GenericElement):
         tab_adv_mir_mov = oasysgui.createTabPage(tabs_advanced_setting, "O.E. Movement")
         tab_adv_sou_mov = oasysgui.createTabPage(tabs_advanced_setting, "Source Movement")
         tab_adv_misc = oasysgui.createTabPage(tabs_advanced_setting, "Output Files")
-
 
         ##########################################
         #
@@ -432,18 +438,36 @@ class FresnelZonePlate(GenericElement):
                     if self.source_distance_flag == 0:
                         self.source_distance = self.source_plane_distance
 
-                    options = FZPSimulatorOptions()
-                    attributes = FZPAttributes()
+                    options = FZPSimulatorOptions(with_central_stop=self.with_central_stop==1,
+                                                  cs_diameter=numpy.round(self.cs_diameter*1e-6, 7),
+                                                  with_order_sorting_aperture=self.with_order_sorting_aperture==1,
+                                                  osa_position=self.osa_position*self.workspace_units_to_m,
+                                                  osa_diameter=numpy.round(self.osa_diameter*1e-6, 7),
+                                                  zone_plate_type=self.zone_plate_type,
+                                                  width_coating=numpy.round(self.width_coating*1e-9, 10),
+                                                  height1_factor=self.height1_factor,
+                                                  height2_factor=self.height2_factor,
+                                                  with_range=False,
+                                                  with_multi_slicing=self.with_multi_slicing==1,
+                                                  n_slices=self.n_slices,
+                                                  with_complex_amplitude=False)
+                    attributes = FZPAttributes(height=numpy.round(self.height*1e-6, 7),
+                                               diameter=numpy.round(self.diameter*1e-6, 7),
+                                               b_min=numpy.round(self.b_min*1e-9, 10),
+                                               zone_plate_material=self.zone_plate_material,
+                                               template_material=self.template_material)
 
                     zone_plate_beam = self.get_zone_plate_beam(attributes)
 
                     self.progressBarSet(30)
 
-                    go = numpy.where(zone_plate_beam._beam.rays[:, 9] == GOOD)
+                    self.avg_energy = numpy.round(ShadowPhysics.getEnergyFromShadowK(numpy.average(zone_plate_beam._beam.rays[numpy.where(zone_plate_beam._beam.rays[:, 9] == GOOD), 10])), 2)
 
                     fzp_simulator = FresnelZonePlateSimulator(attributes=attributes, options=options)
-                    fzp_simulator.initialize(energy_in_KeV=ShadowPhysics.getEnergyFromShadowK(numpy.average(zone_plate_beam._beam.rays[go, 10]))/1000,
-                                             n_points=5000)
+                    fzp_simulator.initialize(energy_in_KeV=self.avg_energy/1000, n_points=self.n_points)
+
+                    self.number_of_zones = fzp_simulator.n_zones
+                    self.focal_distance = numpy.round(fzp_simulator.focal_distance/self.workspace_units_to_m, 5)
 
                     beam_out = self.get_output_beam(zone_plate_beam, fzp_simulator)
 
@@ -477,8 +501,6 @@ class FresnelZonePlate(GenericElement):
 
         self.progressBarFinished()
 
-
-
     def setBeam(self, beam):
         if ShadowCongruence.checkEmptyBeam(beam):
             self.input_beam = beam
@@ -497,7 +519,11 @@ class FresnelZonePlate(GenericElement):
         label = self.le_image_plane_distance.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
 
+        label = self.le_osa_position.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
         label = self.le_source_distance.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_focal_distance.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
 
         # ADVANCED SETTINGS
@@ -534,10 +560,30 @@ class FresnelZonePlate(GenericElement):
     def set_MirrorMovement(self):
         self.mir_mov_box_1.setVisible(self.mirror_movement == 1)
 
+    def set_FZPType(self):
+        self.ord_box.setVisible(self.zone_plate_type == 0)
+        self.zd_box.setVisible(self.zone_plate_type == 1)
+        self.zf_box.setVisible(self.zone_plate_type == 2)
+        self.tl_box.setVisible(self.zone_plate_type == 3)
+
     def set_SourceDistanceFlag(self):
         self.zp_box_1.setVisible(self.source_distance_flag == 1)
         self.zp_box_2.setVisible(self.source_distance_flag == 0)
 
+    def set_WithCentralStop(self):
+        self.cs_box_1.setVisible(self.with_central_stop == 1)
+        self.cs_box_2.setVisible(self.with_central_stop == 0)
+
+    def set_WithOrderSortingAperture(self):
+        self.osa_box_1.setVisible(self.with_order_sorting_aperture == 1)
+        self.osa_box_2.setVisible(self.with_order_sorting_aperture == 0)
+
+    def set_WithMultislicing(self):
+        self.ms_box_1.setVisible(self.with_multi_slicing == 1)
+        self.ms_box_2.setVisible(self.with_multi_slicing == 0)
+
+    def set_ImageDistanceFlag(self):
+        self.le_image_plane_distance.setEnabled(self.image_distance_flag==0)
 
     ######################################################################
     # ZONE PLATE CALCULATION
@@ -603,6 +649,8 @@ class FresnelZonePlate(GenericElement):
         return output_beam
 
     def get_output_beam(self, zone_plate_beam, fzp_simulator):
+        # ----------------------------------------------------------------------------------------
+        # raytracing of an ideal lens to focal position
         ideal_lens = ShadowOpticalElement.create_ideal_lens()
 
         focal_distance = fzp_simulator.focal_distance/self.workspace_units_to_m
@@ -617,15 +665,17 @@ class FresnelZonePlate(GenericElement):
 
         output_beam = ShadowBeam.traceIdealLensOE(zone_plate_beam, ideal_lens, history=True)
 
+        # ----------------------------------------------------------------------------------------
+
         intensity, amplitude, efficiency = fzp_simulator.simulate()
+
+        self.efficiency = numpy.round(efficiency*100, 3)
 
         #----------------------------------------------------------------------------------------
         # from Hybrid: the ideal focusing is corrected by using the image at focus as a divergence correction distribution
-        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(intensity[1, :], last_index=50)
+        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(intensity[1, :], last_index=self.last_index)
         xp = X[0, :]/fzp_simulator.focal_distance
         zp = Y[:, 0]/fzp_simulator.focal_distance
-
-        fzp_simulator.plot_2D(None, intensity[1, :], last_index=100, show=True)
 
         go = numpy.where(output_beam._beam.rays[:, 9] == GOOD)
 
@@ -662,6 +712,6 @@ class FresnelZonePlate(GenericElement):
         output_beam._beam.rays[go, 16] *= numpy.sqrt(efficiency)
         output_beam._beam.rays[go, 17] *= numpy.sqrt(efficiency)
 
-        output_beam._beam.retrace(self.image_plane_distance - focal_distance)
+        if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - focal_distance)
 
         return output_beam

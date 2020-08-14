@@ -191,7 +191,7 @@ class FresnelZonePlateSimulator(object):
         if at.b_min <= 0: raise ValueError("ZP outermost zone width must be > 0")
         if at.diameter <= 0: raise ValueError("ZP Diameter must be > 0")
 
-        if op.zone_plate_type == 2:
+        if op.zone_plate_type in [1, 2]:
             if op.width_coating <= 0: raise ValueError("Coating Width must be > 0")
         if op.zone_plate_type == 3:
             if op.height1_factor <= 0: raise ValueError("Height 1 Factor must be > 0")
@@ -204,6 +204,7 @@ class FresnelZonePlateSimulator(object):
         self.k = 2 * numpy.pi / self.wavelength  # wavevector [m-1]
 
         self.focal_distance = at.diameter * at.b_min / self.wavelength  # focal distance [m]
+        self.n_zones = int(numpy.floor(1.0 / 4.0 * (at.diameter / at.b_min)))
 
         self.max_radius = at.diameter
         self.step = self.max_radius / self.n_points
@@ -424,15 +425,13 @@ class FresnelZonePlateSimulator(object):
         at = self.__attributes
         op = self.__options
 
-        n_zones = int(numpy.floor(1.0 / 4.0 * (at.diameter / at.b_min)))
-
-        radia = numpy.sqrt(numpy.arange(0, n_zones + 1) * self.wavelength * self.focal_distance + ((numpy.arange(0, n_zones + 1) * self.wavelength) ** 2) / 4)
+        radia = numpy.sqrt(numpy.arange(0, self.n_zones + 1) * self.wavelength * self.focal_distance + ((numpy.arange(0, self.n_zones + 1) * self.wavelength) ** 2) / 4)
         profile = numpy.full(self.n_points, 1 + 0j)
-        profile[int(numpy.floor(radia[n_zones] / self.step)):self.n_points] = 0
+        profile[int(numpy.floor(radia[self.n_zones] / self.step)):self.n_points] = 0
 
         # Ordinary FZP
         if op.zone_plate_type == 0:
-            for i in range(1, n_zones, 2):
+            for i in range(1, self.n_zones, 2):
                 position_i = int(numpy.floor(radia[i] / self.step))
                 position_f = int(numpy.floor(radia[i + 1] / self.step))  # N.B. the index is excluded
                 profile[position_i:position_f] = numpy.exp(-1j * (-2 * numpy.pi * self.delta_FZP / self.wavelength * at.height - 1j * 2 * numpy.pi * self.beta_FZP / self.wavelength * at.height))
@@ -441,7 +440,7 @@ class FresnelZonePlateSimulator(object):
 
         # Zone-doubled FZP
         if op.zone_plate_type == 1:
-            for i in range(1, n_zones, 2):
+            for i in range(1, self.n_zones, 2):
                 position_i = int(numpy.floor((radia[i] + at.b_min / 4) / self.step))
                 position_f = int(numpy.floor((radia[i + 1] - at.b_min / 4) / self.step))
                 profile[position_i:position_f] = numpy.exp(-1j * (-2 * numpy.pi * self.delta_template / self.wavelength * at.height - 1j * 2 * numpy.pi * self.beta_template / self.wavelength * at.height))
@@ -459,7 +458,7 @@ class FresnelZonePlateSimulator(object):
 
         # Zone-filled FZP
         if op.zone_plate_type == 2:
-            for i in range(1, n_zones, 2):
+            for i in range(1, self.n_zones, 2):
 
                 position_i = int(numpy.floor(radia[i] / self.step))
                 position_f = int(numpy.floor(radia[i + 1] / self.step))
@@ -496,7 +495,7 @@ class FresnelZonePlateSimulator(object):
             height1 = op.height1_factor * at.height
             height2 = op.height2_factor * at.height
 
-            for i in range(1, n_zones, 2):
+            for i in range(1, self.n_zones, 2):
                 position_i = int(numpy.floor((2 * radia[i - 1] / 3 + radia[i + 1] / 3) / self.step))
                 position_f = int(numpy.floor((radia[i - 1] / 3 + 2 * radia[i + 1] / 3) / self.step))
                 profile[position_i:position_f] = numpy.exp(-1j * (-2 * numpy.pi * self.delta_FZP / self.wavelength * height1 - 1j * 2 * numpy.pi * self.beta_FZP / self.wavelength * height1))
