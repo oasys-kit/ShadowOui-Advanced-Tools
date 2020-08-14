@@ -112,10 +112,10 @@ OSA_diam = 30e-6             # OSA diameter [m]
 N = 5000                     # Number of sampling point in radial direction
 R = diam                      # Radius of the simulation
 step = R/N
-Nzeros = numpy.floor(1.25*diam/2/R*N) # Parameter to speed up the Hankel Transform
-                                      # when the function has zeros for N > Nzero
-Nz = 3                                # Number of sampling points along the z axis
-factor_z = 1.6                        # Z axis range up to factor_z*f
+Nzeros = int(numpy.floor(1.25*diam/2/R*N)) # Parameter to speed up the Hankel Transform
+                                           # when the function has zeros for N > Nzero
+Nz = 3          # Number of sampling points along the z axis
+factor_z = 1.6  # Z axis range up to factor_z*f
 
 #% FZP Material
 #--------------------------------------------------------------------------

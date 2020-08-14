@@ -209,13 +209,14 @@ class FresnelZonePlateSimulator(object):
         self.max_radius = at.diameter
         self.step = self.max_radius / self.n_points
 
-        self.n_zeros = numpy.floor(1.25 * at.diameter / 2 / self.max_radius * n_points)  # Parameter to speed up the Hankel Transform
+        self.n_zeros = int(numpy.floor(1.25 * at.diameter / 2 / self.max_radius * n_points))  # Parameter to speed up the Hankel Transform
         # when the function has zeros for N > Nzero
 
         self.delta_FZP, self.beta_FZP = get_delta_beta(energy_in_KeV, at.zone_plate_material)
         self.delta_template, self.beta_template = get_delta_beta(energy_in_KeV, at.template_material)
 
         if op.with_multi_slicing:
+            if op.n_slices <= 1: raise ValueError("Number of slices position must be > 1")
             self.n_slices = op.n_slices
         else:
             self.n_slices = 1
@@ -258,6 +259,8 @@ class FresnelZonePlateSimulator(object):
 
         # Calculation of the first angular spectrum
         # --------------------------------------------------------------------------
+
+        print("Initialization, (or Slice #: ", 1, ")" )
 
         field0 = profile_h * membrane_transmission
         map_int[0, :] = numpy.multiply(numpy.abs(field0), numpy.abs(field0))
@@ -356,6 +359,7 @@ class FresnelZonePlateSimulator(object):
             plot_canvas.getColormapAction().setVisible(True)
             plot_canvas.setKeepDataAspectRatio(False)
 
+        plot_canvas.clear()
         plot_canvas.addImage(numpy.array(data_to_plot),
                                                 legend="rotated",
                                                 scale=scale,
@@ -537,7 +541,9 @@ class FresnelZonePlateSimulator(object):
     def __propagate_multislicing(self, map_int, map_complex, field0, four0, q_max, q, c):
         step_slice = self.__attributes.height
 
-        for n in range(self.n_slices - 1):
+        for n in range(self.n_slices-1):
+            print("Propagation to slice #: ", n+2)
+
             proj = numpy.exp(-1j * step_slice * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
 
             fun = numpy.multiply(proj, four0)
@@ -661,11 +667,15 @@ from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout
 if __name__ == "__main__":
     app = QApplication([])
 
-    n_z = 5
-    zs = FresnelZonePlateSimulator(options=FZPSimulatorOptions(with_range=False,
+    with_range = False
+    n_z = 5 if with_range else 1
+
+    zs = FresnelZonePlateSimulator(options=FZPSimulatorOptions(with_range=with_range,
                                                                range_i=0.0160,
                                                                range_f=0.0162,
-                                                               n_z=n_z),
+                                                               n_z=n_z,
+                                                               with_multi_slicing=True,
+                                                               n_slices=3),
                                    attributes=FZPAttributes())
 
     zs.initialize(energy_in_KeV=8.0, n_points=5000)
@@ -681,11 +691,11 @@ if __name__ == "__main__":
 
     figure = None
     for i in range(n_z):
-        figure = zs.plot_1D(figure, map_int[1+i, :], 50, replace=i==0, profile_name="z pos #" + str(i+1))
+        figure = zs.plot_1D(figure, map_int[zs.n_slices+i, :], 50, replace=i==0, profile_name="z pos #" + str(i+1))
 
     layout.addWidget(figure)
-    layout.addWidget(zs.plot_2D(None, map_int[4, :], 50))
-    layout.addWidget(zs.plot_3D(None, map_int[2, :], 50))
+    layout.addWidget(zs.plot_2D(None, map_int[-1, :], 50))
+    layout.addWidget(zs.plot_3D(None, map_int[zs.n_slices, :], 50))
 
     container.setLayout(layout)
     container.show()

@@ -259,7 +259,7 @@ class FresnelZonePlate(GenericElement):
 
         prop_box = oasysgui.widgetBox(tab_zone_plate_2, "Propagation Parameters", addSpace=False, orientation="vertical", height=270)
 
-        gui.comboBox(prop_box, self, "with_multi_slicing", label="With Multislicing", labelWidth=350,
+        gui.comboBox(prop_box, self, "with_multi_slicing", label="With Multi-Slicing", labelWidth=350,
                      items=["No", "Yes"],
                      callback=self.set_WithMultislicing, sendSelectedValue=False, orientation="horizontal")
 
@@ -404,6 +404,16 @@ class FresnelZonePlate(GenericElement):
         gui.rubber(self.controlArea)
         gui.rubber(self.mainArea)
 
+        propagation_plot_tab = oasysgui.widgetBox(self.main_tabs, addToLayout=0, margin=4)
+
+        self.main_tabs.insertTab(1, propagation_plot_tab, "TEMP")
+        self.main_tabs.setTabText(0, "Shadow Plot")
+        self.main_tabs.setTabText(1, "F.Z.P. Simulator Plot")
+
+        self.prop_tabs = oasysgui.tabWidget(propagation_plot_tab)
+        self.prop_tab = [oasysgui.createTabPage(self.prop_tabs, "Radial Intensity"),
+                         oasysgui.createTabPage(self.prop_tabs, "Generated 2D distribution")]
+        self.prop_plot_canvas = [None, None]
 
     def isFootprintEnabled(self):
         return False
@@ -641,11 +651,6 @@ class FresnelZonePlate(GenericElement):
 
         output_beam = ShadowBeam.traceFromOE(self.input_beam, empty_element, history=True)
 
-        go = numpy.where(output_beam._beam.rays[:, 9] == GOOD)
-        lo = numpy.where(output_beam._beam.rays[:, 9] != GOOD)
-
-        print("Zone Plate Beam: ", "GO", len(go[0]), "LO", len(lo[0]))
-
         return output_beam
 
     def get_output_beam(self, zone_plate_beam, fzp_simulator):
@@ -667,13 +672,15 @@ class FresnelZonePlate(GenericElement):
 
         # ----------------------------------------------------------------------------------------
 
-        intensity, amplitude, efficiency = fzp_simulator.simulate()
+        intensity, _, efficiency = fzp_simulator.simulate()
 
         self.efficiency = numpy.round(efficiency*100, 3)
 
         #----------------------------------------------------------------------------------------
         # from Hybrid: the ideal focusing is corrected by using the image at focus as a divergence correction distribution
-        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(intensity[1, :], last_index=self.last_index)
+        intensity_index = self.n_slices if self.with_multi_slicing else 1
+
+        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(intensity[intensity_index, :], last_index=self.last_index)
         xp = X[0, :]/fzp_simulator.focal_distance
         zp = Y[:, 0]/fzp_simulator.focal_distance
 
@@ -714,4 +721,20 @@ class FresnelZonePlate(GenericElement):
 
         if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - focal_distance)
 
+        self. plot_propagation_results(fzp_simulator, intensity[intensity_index, :])
+
         return output_beam
+
+    def plot_propagation_results(self, fzp_simulator, profile_1D):
+        if self.prop_plot_canvas[0] is None:
+            self.prop_plot_canvas[0] = fzp_simulator.plot_1D(None, profile_1D, self.last_index, replace=True)
+            self.prop_tab[0].layout().addWidget(self.prop_plot_canvas[0])
+        else:
+            fzp_simulator.plot_1D(self.prop_plot_canvas[0], profile_1D, self.last_index, replace=True)
+
+        if self.prop_plot_canvas[1] is None:
+            self.prop_plot_canvas[1] = fzp_simulator.plot_2D(None, profile_1D, self.last_index)
+            self.prop_tab[1].layout().addWidget(self.prop_plot_canvas[1])
+        else:
+            fzp_simulator.plot_2D(self.prop_plot_canvas[1], profile_1D, self.last_index)
+
