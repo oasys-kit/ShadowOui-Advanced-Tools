@@ -328,16 +328,13 @@ class FresnelZonePlateSimulator(object):
         return plot_canvas
 
     def plot_2D(self, plot_canvas, profile_1D, last_index=-1, show=False):
-        radius = numpy.arange(0, self.max_radius, self.step)
+        X, Y, data2D = self.create_2D_profile(profile_1D, last_index)
 
-        X, Y, data2D = FresnelZonePlateSimulator.__create_2D_profile_from_1D(radius[:last_index], profile_1D[:last_index])
         dataX = X[0, :]
         dataY = Y[:, 0]
 
         origin = (dataX[0], dataY[0])
         scale = (dataX[1] - dataX[0], dataY[1] - dataY[0])
-
-        data_to_plot = data2D.T
 
         colormap = {"name": "temperature", "normalization": "linear", "autoscale": True, "vmin": 0, "vmax": 0, "colors": 256}
 
@@ -360,12 +357,12 @@ class FresnelZonePlateSimulator(object):
             plot_canvas.setKeepDataAspectRatio(False)
 
         plot_canvas.clear()
-        plot_canvas.addImage(numpy.array(data_to_plot),
-                                                legend="rotated",
-                                                scale=scale,
-                                                origin=origin,
-                                                colormap=colormap,
-                                                replace=True)
+        plot_canvas.addImage(numpy.array(data2D),
+                             legend="rotated",
+                             scale=scale,
+                             origin=origin,
+                             colormap=colormap,
+                             replace=True)
 
         plot_canvas.setActiveImage("rotated")
         plot_canvas.setGraphXLabel("X [m]")
@@ -377,9 +374,7 @@ class FresnelZonePlateSimulator(object):
         return plot_canvas
 
     def plot_3D(self, figure_canvas, profile_1D, last_index=-1, show=False):
-        radius = numpy.arange(0, self.max_radius, self.step)
-
-        X, Y, data2D = FresnelZonePlateSimulator.__create_2D_profile_from_1D(radius[:last_index], profile_1D[:last_index])
+        X, Y, data2D = self.create_2D_profile(profile_1D, last_index)
 
         if figure_canvas is None:
             figure = Figure(figsize=(600, 600))
