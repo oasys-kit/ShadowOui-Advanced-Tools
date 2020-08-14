@@ -674,11 +674,11 @@ if __name__ == "__main__":
                                                                range_i=0.0160,
                                                                range_f=0.0162,
                                                                n_z=n_z,
-                                                               with_multi_slicing=True,
+                                                               with_multi_slicing=False,
                                                                n_slices=3),
                                    attributes=FZPAttributes())
 
-    zs.initialize(energy_in_KeV=8.0, n_points=5000)
+    zs.initialize(energy_in_KeV=8.0, n_points=10000)
 
     map_int, _, efficiency = zs.simulate()
 

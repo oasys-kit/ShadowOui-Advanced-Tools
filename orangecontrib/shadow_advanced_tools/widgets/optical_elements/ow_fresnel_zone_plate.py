@@ -210,8 +210,8 @@ class FresnelZonePlate(GenericElement):
         oasysgui.lineEdit(self.zf_box, self, "width_coating", "Coating Width [nm]", labelWidth=260, valueType=float, orientation="horizontal")
 
         self.tl_box = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=60)
-        oasysgui.lineEdit(self.tl_box, self, "height1_factor",  "Height Factor 1", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(self.tl_box, self, "height2_factor",  "Height Factor 2", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.tl_box, self, "height1_factor",  "Height 1 Factor", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.tl_box, self, "height2_factor",  "Height 2 Factor", labelWidth=260, valueType=float, orientation="horizontal")
 
         self.set_FZPType()
 
@@ -477,7 +477,7 @@ class FresnelZonePlate(GenericElement):
                     fzp_simulator.initialize(energy_in_KeV=self.avg_energy/1000, n_points=self.n_points)
 
                     self.number_of_zones = fzp_simulator.n_zones
-                    self.focal_distance = numpy.round(fzp_simulator.focal_distance/self.workspace_units_to_m, 5)
+                    self.focal_distance = numpy.round(fzp_simulator.focal_distance/self.workspace_units_to_m, 6)
 
                     beam_out = self.get_output_beam(zone_plate_beam, fzp_simulator)
 
