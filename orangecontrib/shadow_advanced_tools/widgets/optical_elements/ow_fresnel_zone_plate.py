@@ -721,7 +721,7 @@ class FresnelZonePlate(GenericElement):
 
         if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - focal_distance)
 
-        self. plot_propagation_results(fzp_simulator, intensity[intensity_index, :])
+        self.plot_propagation_results(fzp_simulator, intensity[intensity_index, :])
 
         return output_beam
 
