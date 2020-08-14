@@ -460,7 +460,8 @@ class FresnelZonePlate(GenericElement):
                                                   with_range=False,
                                                   with_multi_slicing=self.with_multi_slicing==1,
                                                   n_slices=self.n_slices,
-                                                  with_complex_amplitude=False)
+                                                  with_complex_amplitude=False,
+                                                  store_partial_results=False)
                     attributes = FZPAttributes(height=numpy.round(self.height*1e-6, 7),
                                                diameter=numpy.round(self.diameter*1e-6, 7),
                                                b_min=numpy.round(self.b_min*1e-9, 10),
@@ -674,13 +675,13 @@ class FresnelZonePlate(GenericElement):
 
         intensity, _, efficiency = fzp_simulator.simulate()
 
+        profile_1D = intensity[-1, :]
         self.efficiency = numpy.round(efficiency*100, 3)
 
         #----------------------------------------------------------------------------------------
         # from Hybrid: the ideal focusing is corrected by using the image at focus as a divergence correction distribution
-        intensity_index = self.n_slices if self.with_multi_slicing else 1
 
-        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(intensity[intensity_index, :], last_index=self.last_index)
+        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(profile_1D, last_index=self.last_index)
         xp = X[0, :]/fzp_simulator.focal_distance
         zp = Y[:, 0]/fzp_simulator.focal_distance
 
@@ -721,7 +722,7 @@ class FresnelZonePlate(GenericElement):
 
         if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - focal_distance)
 
-        self.plot_propagation_results(fzp_simulator, intensity[intensity_index, :])
+        self.plot_propagation_results(fzp_simulator, profile_1D)
 
         return output_beam
 

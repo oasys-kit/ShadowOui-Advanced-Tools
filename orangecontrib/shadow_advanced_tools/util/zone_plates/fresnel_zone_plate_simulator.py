@@ -131,7 +131,8 @@ class FZPSimulatorOptions():
                  n_z=3,
                  with_multi_slicing=False,
                  n_slices=100,
-                 with_complex_amplitude=False
+                 with_complex_amplitude=False,
+                 store_partial_results=True
                  ):
         self.with_central_stop = with_central_stop
         self.cs_diameter = cs_diameter
@@ -149,6 +150,7 @@ class FZPSimulatorOptions():
         self.with_multi_slicing = with_multi_slicing
         self.n_slices = n_slices
         self.with_complex_amplitude = with_complex_amplitude
+        self.store_partial_results = store_partial_results
 
 
 # % ------------------------------------------
@@ -254,8 +256,12 @@ class FresnelZonePlateSimulator(object):
         # Recalculation of the position where the initial profile is defined.
         profile_h = self.__get_profile_h(profile, r)
 
-        map_int = numpy.zeros((self.n_slices + self.n_z, self.n_points))
-        map_complex = numpy.full((self.n_slices + self.n_z, self.n_points), 0j)
+        if op.store_partial_results:
+            map_int     = numpy.zeros((self.n_slices + self.n_z, self.n_points))
+            map_complex = numpy.full((self.n_slices + self.n_z, self.n_points), 0j)
+        else:
+            map_int     = numpy.zeros((self.n_z, self.n_points))
+            map_complex = numpy.full((self.n_z, self.n_points), 0j)
 
         # Calculation of the first angular spectrum
         # --------------------------------------------------------------------------
@@ -263,8 +269,9 @@ class FresnelZonePlateSimulator(object):
         print("Initialization, (or Slice #: ", 1, ")" )
 
         field0 = profile_h * membrane_transmission
-        map_int[0, :] = numpy.multiply(numpy.abs(field0), numpy.abs(field0))
-        map_complex[0, :] = field0[0: self.n_points]
+        if op.store_partial_results:
+            map_int[0, :] = numpy.multiply(numpy.abs(field0), numpy.abs(field0))
+            map_complex[0, :] = field0[0: self.n_points]
         four0 = hankel_transform(field0, self.max_radius, c)
         field0 = profile_h
 
@@ -534,7 +541,8 @@ class FresnelZonePlateSimulator(object):
     ###################################################
     #
     def __propagate_multislicing(self, map_int, map_complex, field0, four0, q_max, q, c):
-        step_slice = self.__attributes.height
+        step_slice            = self.__attributes.height
+        store_partial_results = self.__options.store_partial_results
 
         for n in range(self.n_slices-1):
             print("Propagation to slice #: ", n+2)
@@ -545,8 +553,9 @@ class FresnelZonePlateSimulator(object):
             field = hankel_transform(fun, q_max, c)
             fun = numpy.multiply(field0, field)
 
-            map_int[1 + n, :] = numpy.multiply(numpy.abs(fun), numpy.abs(fun))
-            map_complex[1 + n, :] = fun
+            if store_partial_results:
+                map_int[1 + n, :] = numpy.multiply(numpy.abs(fun), numpy.abs(fun))
+                map_complex[1 + n, :] = fun
 
             four0 = hankel_transform(fun, self.max_radius, c, self.n_zeros)
 
@@ -610,14 +619,20 @@ class FresnelZonePlateSimulator(object):
     ###################################################
     #
     def __propagate_to_distance(self, map_int, map_complex, z, four0, q_max, q, c, map_index=0):
+        store_partial_results = self.__options.store_partial_results
+
         print("Propagation to distance: ", z, " m")
 
         proj = numpy.exp(-1j * z * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
         fun = numpy.multiply(proj, four0)
         four11 = hankel_transform(fun, q_max, c)
 
-        map_int[map_index + self.n_slices, :] = numpy.multiply(numpy.abs(four11), numpy.abs(four11))
-        map_complex[map_index + self.n_slices, :] = four11
+        if store_partial_results:
+            map_int[map_index + self.n_slices, :] = numpy.multiply(numpy.abs(four11), numpy.abs(four11))
+            map_complex[map_index + self.n_slices, :] = four11
+        else:
+            map_int[map_index  :] = numpy.multiply(numpy.abs(four11), numpy.abs(four11))
+            map_complex[map_index, :] = four11
 
     ###################################################
     #
