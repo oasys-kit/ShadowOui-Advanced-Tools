@@ -77,9 +77,9 @@ from scipy import interpolate
 from oasys.widgets import gui as oasysgui
 from silx.gui.plot import Plot2D
 
-from orangecontrib.shadow.util.zone_plates import bessel_zeros
-from orangecontrib.shadow.util.zone_plates.hankel_transform import hankel_transform
-from orangecontrib.shadow.util.zone_plates.refractive_index import get_delta_beta
+from orangecontrib.shadow_advanced_tools.util.zone_plates import bessel_zeros
+from orangecontrib.shadow_advanced_tools.util.zone_plates.hankel_transform import hankel_transform
+from orangecontrib.shadow_advanced_tools.util.zone_plates.refractive_index import get_delta_beta
 
 
 # % ------------------------------------------
@@ -113,7 +113,7 @@ from orangecontrib.shadow.util.zone_plates.refractive_index import get_delta_bet
 # with_complex_amplitude = False
 #
 # % ------------------------------------------
-class ZonePlateSimulatorOptions():
+class FZPSimulatorOptions():
 
     def __init__(self,
                  with_central_stop=True,
@@ -158,7 +158,7 @@ class ZonePlateSimulatorOptions():
 # b_min = outermost zone width [m] / outermost period for ZD [m]
 #
 # % ------------------------------------------
-class ZonePlateAttributes():
+class FZPAttributes():
 
     def __init__(self,
                  height=20000e-9,
@@ -174,9 +174,9 @@ class ZonePlateAttributes():
         self.template_material = template_material
 
 
-class ZonePlateSimulator(object):
+class FresnelZonePlateSimulator(object):
 
-    def __init__(self, options=ZonePlateSimulatorOptions(), attributes=ZonePlateAttributes()):
+    def __init__(self, options=FZPSimulatorOptions(), attributes=FZPAttributes()):
         self.__options = options
         self.__attributes = attributes
 
@@ -326,7 +326,7 @@ class ZonePlateSimulator(object):
     def plot_2D(self, plot_canvas, profile_1D, last_index=-1, show=False):
         radius = numpy.arange(0, self.max_radius, self.step)
 
-        X, Y, data2D = ZonePlateSimulator.create_2D_profile(radius[:last_index], profile_1D[:last_index])
+        X, Y, data2D = FresnelZonePlateSimulator.__create_2D_profile_from_1D(radius[:last_index], profile_1D[:last_index])
         dataX = X[0, :]
         dataY = Y[:, 0]
 
@@ -374,7 +374,7 @@ class ZonePlateSimulator(object):
     def plot_3D(self, figure_canvas, profile_1D, last_index=-1, show=False):
         radius = numpy.arange(0, self.max_radius, self.step)
 
-        X, Y, data2D = ZonePlateSimulator.create_2D_profile(radius[:last_index], profile_1D[:last_index])
+        X, Y, data2D = FresnelZonePlateSimulator.__create_2D_profile_from_1D(radius[:last_index], profile_1D[:last_index])
 
         if figure_canvas is None:
             figure = Figure(figsize=(600, 600))
@@ -399,11 +399,16 @@ class ZonePlateSimulator(object):
 
         return figure_canvas
 
-    @classmethod
-    def create_2D_profile(cls, r, profile_1D):
-        interpol_index = interpolate.interp1d(r, profile_1D, bounds_error=False, fill_value=0.0)
+    def create_2D_profile(self, profile_1D, last_index=-1):
+        radius = numpy.arange(0, self.max_radius, self.step)
 
-        xv = numpy.arange(-r[-1], r[-1], r[1] - r[0])  # adjust your matrix values here
+        return FresnelZonePlateSimulator.__create_2D_profile_from_1D(radius[:last_index], profile_1D[:last_index])
+
+    @classmethod
+    def __create_2D_profile_from_1D(cls, radius, profile_1D):
+        interpol_index = interpolate.interp1d(radius, profile_1D, bounds_error=False, fill_value=0.0)
+
+        xv = numpy.arange(-radius[-1], radius[-1], radius[1] - radius[0])  # adjust your matrix values here
         X, Y = numpy.meshgrid(xv, xv)
         profilegrid = numpy.zeros(X.shape, float)
         for i, x in enumerate(X[0, :]):
@@ -658,11 +663,11 @@ if __name__ == "__main__":
     app = QApplication([])
 
     n_z = 5
-    zs = ZonePlateSimulator(options=ZonePlateSimulatorOptions(with_range=True,
-                                                              range_i=0.0160,
-                                                              range_f=0.0162,
-                                                              n_z=n_z),
-                            attributes=ZonePlateAttributes())
+    zs = FresnelZonePlateSimulator(options=FZPSimulatorOptions(with_range=False,
+                                                               range_i=0.0160,
+                                                               range_f=0.0162,
+                                                               n_z=n_z),
+                                   attributes=FZPAttributes())
 
     zs.initialize(energy_in_KeV=8.0, n_points=5000)
 

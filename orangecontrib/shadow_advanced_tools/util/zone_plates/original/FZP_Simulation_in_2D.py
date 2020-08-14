@@ -62,10 +62,10 @@
 #%% ------------------------------------------------------------------------
 
 import numpy
-from orangecontrib.shadow.util.zone_plates.original import bessel_zeros
-from orangecontrib.shadow.util.zone_plates.original.hankel_transform_MGS import Hankel_Transform_MGS
-from orangecontrib.shadow.util.zone_plates.original.refractive_index import RefractiveIndex
-from orangecontrib.shadow.util.zone_plates.original.efficiency_MGS import Efficiency_MGS
+from orangecontrib.shadow_advanced_tools.util.zone_plates.original import bessel_zeros
+from orangecontrib.shadow_advanced_tools.util.zone_plates.original.hankel_transform_MGS import Hankel_Transform_MGS
+from orangecontrib.shadow_advanced_tools.util.zone_plates.original.refractive_index import RefractiveIndex
+from orangecontrib.shadow_advanced_tools.util.zone_plates.original.efficiency_MGS import Efficiency_MGS
 
 ## FZP, CS, OSA and simulation parameters
 #--------------------------------------------------------------------------
