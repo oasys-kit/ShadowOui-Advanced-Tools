@@ -85,8 +85,8 @@ class FresnelZonePlate(GenericElement):
     osa_position = Setting(10.0) # user units
     osa_diameter =  Setting(30.0) # um
 
-    source_distance_flag = Setting(0)
-    source_distance = Setting(0.0)
+    #source_distance_flag = Setting(0)
+    #source_distance = Setting(0.0)
 
     image_distance_flag = Setting(1)
 
@@ -247,6 +247,7 @@ class FresnelZonePlate(GenericElement):
 
         self.set_WithOrderSortingAperture()
 
+        '''
         gui.comboBox(zp_box, self, "source_distance_flag", label="Source Distance", labelWidth=350,
                      items=["Same as Source Plane", "Different"],
                      callback=self.set_SourceDistanceFlag, sendSelectedValue=False, orientation="horizontal")
@@ -259,6 +260,7 @@ class FresnelZonePlate(GenericElement):
         self.le_source_distance = oasysgui.lineEdit(self.zp_box_1, self, "source_distance", "Source Distance", labelWidth=260, valueType=float, orientation="horizontal")
 
         self.set_SourceDistanceFlag()
+        '''
 
         gui.comboBox(zp_box, self, "image_distance_flag", label="Image Distance", labelWidth=350,
                      items=["Image Plane Distance", "Z.P. Focal Distance"],
@@ -267,6 +269,7 @@ class FresnelZonePlate(GenericElement):
         self.set_ImageDistanceFlag()
 
         prop_box = oasysgui.widgetBox(tab_zone_plate_2, "Propagation Parameters", addSpace=False, orientation="vertical", height=270)
+
         '''
         gui.comboBox(prop_box, self, "with_multi_slicing", label="With Multi-Slicing", labelWidth=350,
                      items=["No", "Yes"],
@@ -468,8 +471,8 @@ class FresnelZonePlate(GenericElement):
 
                     self.progressBarSet(10)
 
-                    if self.source_distance_flag == 0:
-                        self.source_distance = self.source_plane_distance
+                    #if self.source_distance_flag == 0:
+                    #    self.source_distance = self.source_plane_distance
 
                     options = FZPSimulatorOptions(with_central_stop=self.with_central_stop==1,
                                                   cs_diameter=numpy.round(self.cs_diameter*1e-6, 7),
@@ -555,8 +558,8 @@ class FresnelZonePlate(GenericElement):
 
         label = self.le_osa_position.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
-        label = self.le_source_distance.parent().layout().itemAt(0).widget()
-        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        #label = self.le_source_distance.parent().layout().itemAt(0).widget()
+        #label.setText(label.text() + " [" + self.workspace_units_label + "]")
         label = self.le_focal_distance.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
 
@@ -687,10 +690,10 @@ class FresnelZonePlate(GenericElement):
         ideal_lens = ShadowOpticalElement.create_ideal_lens()
 
         focal_distance = fzp_simulator.focal_distance/self.workspace_units_to_m
-        focal_xz = 1 / ((1 / self.source_distance) + (1 / focal_distance))
+        #focal_xz = 1 / ((1 / self.source_distance) + (1 / focal_distance))
 
-        ideal_lens._oe.focal_x = focal_xz
-        ideal_lens._oe.focal_z = focal_xz
+        ideal_lens._oe.focal_x = focal_distance #focal_xz
+        ideal_lens._oe.focal_z = focal_distance #focal_xz
 
         ideal_lens._oe.user_units_to_cm = self.workspace_units_to_cm
         ideal_lens._oe.T_SOURCE         = 0.0
