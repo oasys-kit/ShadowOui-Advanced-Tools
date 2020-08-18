@@ -1,7 +1,7 @@
 recursive-include orangecontrib *.pyx
 recursive-include orangecontrib *.py
 
-recursive-include orangecontrib/shadow_advanced_tools/util/zone_plates *.mat
+recursive-include orangecontrib/shadow_advanced_tools/util/fresnel_zone_plates *.mat
 recursive-include orangecontrib/shadow_advanced_tools/widgets *.png *.svg *.ico *.jpg *.bmp
 
 include README.md
