@@ -3,6 +3,12 @@ import sys, numpy, copy
 from PyQt5.QtGui import QPalette, QColor, QFont
 from PyQt5.QtWidgets import QMessageBox
 
+from matplotlib import cm, rcParams
+
+from scipy.interpolate import RectBivariateSpline, interp1d
+
+from silx.gui.plot import Plot2D
+
 from orangewidget import gui, widget
 from orangewidget.settings import Setting
 from oasys.widgets import gui as oasysgui
@@ -86,6 +92,9 @@ class FresnelZonePlate(GenericElement):
 
     with_multi_slicing = Setting(0)
     n_slices = Setting(100)
+
+    increase_resolution = Setting(1)
+    increase_points = Setting(200)
 
     n_points = Setting(5000)
     last_index = Setting(100)
@@ -258,7 +267,7 @@ class FresnelZonePlate(GenericElement):
         self.set_ImageDistanceFlag()
 
         prop_box = oasysgui.widgetBox(tab_zone_plate_2, "Propagation Parameters", addSpace=False, orientation="vertical", height=270)
-
+        '''
         gui.comboBox(prop_box, self, "with_multi_slicing", label="With Multi-Slicing", labelWidth=350,
                      items=["No", "Yes"],
                      callback=self.set_WithMultislicing, sendSelectedValue=False, orientation="horizontal")
@@ -269,9 +278,23 @@ class FresnelZonePlate(GenericElement):
         oasysgui.lineEdit(self.ms_box_1, self, "n_slices", "Nr. Slices", labelWidth=260, valueType=int, orientation="horizontal")
 
         self.set_WithMultislicing()
+        '''
 
         oasysgui.lineEdit(prop_box, self, "n_points", "Nr. Sampling Points", labelWidth=260, valueType=int, orientation="horizontal")
         oasysgui.lineEdit(prop_box, self, "last_index", "Last Index of Focal Image", labelWidth=260, valueType=int, orientation="horizontal")
+
+        gui.separator(prop_box)
+
+        gui.comboBox(prop_box, self, "increase_resolution", label="Increase Resolution in Focal Image", labelWidth=350,
+                     items=["No", "Yes"],
+                     callback=self.set_IncreaseResolution, sendSelectedValue=False, orientation="horizontal")
+
+        self.res_box_1 = oasysgui.widgetBox(prop_box, "", addSpace=False, orientation="vertical", height=30)
+        self.res_box_2 = oasysgui.widgetBox(prop_box, "", addSpace=False, orientation="vertical", height=30)
+
+        oasysgui.lineEdit(self.res_box_1, self, "increase_points", "Nr. Points", labelWidth=260, valueType=int, orientation="horizontal")
+
+        self.set_IncreaseResolution()
 
         zp_out_box = oasysgui.widgetBox(tab_zone_plate_3, "Output Parameters", addSpace=False, orientation="vertical", height=270)
 
@@ -593,6 +616,10 @@ class FresnelZonePlate(GenericElement):
         self.ms_box_1.setVisible(self.with_multi_slicing == 1)
         self.ms_box_2.setVisible(self.with_multi_slicing == 0)
 
+    def set_IncreaseResolution(self):
+        self.res_box_1.setVisible(self.increase_resolution == 1)
+        self.res_box_2.setVisible(self.increase_resolution == 0)
+
     def set_ImageDistanceFlag(self):
         self.le_image_plane_distance.setEnabled(self.image_distance_flag==0)
 
@@ -681,9 +708,30 @@ class FresnelZonePlate(GenericElement):
         #----------------------------------------------------------------------------------------
         # from Hybrid: the ideal focusing is corrected by using the image at focus as a divergence correction distribution
 
-        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(profile_1D, last_index=self.last_index)
-        xp = X[0, :]/fzp_simulator.focal_distance
-        zp = Y[:, 0]/fzp_simulator.focal_distance
+        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(profile_1D, self.last_index)
+        
+        x = X[0, :]
+        z = Y[:, 0]
+
+        xp = x/fzp_simulator.focal_distance
+        zp = z/fzp_simulator.focal_distance
+
+        data_1D = profile_1D[:self.last_index]
+        radius  = numpy.arange(0, fzp_simulator.max_radius, fzp_simulator.step)[:self.last_index]
+
+        if self.increase_resolution:
+            interpolator = interp1d(radius, data_1D, bounds_error=False, fill_value=0.0, kind='quadratic')
+            radius = numpy.linspace(radius[0], radius[-1], self.increase_points)
+            
+            data_1D = interpolator(radius)
+            
+            interpolator = RectBivariateSpline(xp, zp, dif_xpzp, bbox=[None, None, None, None], kx=2, ky=2, s=0)
+            x  = numpy.linspace(x[0], x[-1], self.increase_points)
+            z  = numpy.linspace(z[0], z[-1], self.increase_points)
+            xp = numpy.linspace(xp[0], xp[-1], self.increase_points)
+            zp = numpy.linspace(zp[0], zp[-1], self.increase_points)
+
+            dif_xpzp = interpolator(xp, zp)
 
         go = numpy.where(output_beam._beam.rays[:, 9] == GOOD)
 
@@ -722,20 +770,94 @@ class FresnelZonePlate(GenericElement):
 
         if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - focal_distance)
 
-        self.plot_propagation_results(fzp_simulator, profile_1D)
+        self.plot_propagation_results(radius*1e6, data_1D, x*1e6, z*1e6, dif_xpzp)
 
         return output_beam
 
-    def plot_propagation_results(self, fzp_simulator, profile_1D):
-        if self.prop_plot_canvas[0] is None:
-            self.prop_plot_canvas[0] = fzp_simulator.plot_1D(None, profile_1D, self.last_index, replace=True)
-            self.prop_tab[0].layout().addWidget(self.prop_plot_canvas[0])
-        else:
-            fzp_simulator.plot_1D(self.prop_plot_canvas[0], profile_1D, self.last_index, replace=True)
+    def plot_propagation_results(self, radius, data_1D, x, z, data2D):
+        self.plot_1D(0, radius, data_1D)
+        self.plot_2D(1, x, z, data2D)
 
-        if self.prop_plot_canvas[1] is None:
-            self.prop_plot_canvas[1] = fzp_simulator.plot_2D(None, profile_1D, self.last_index)
-            self.prop_tab[1].layout().addWidget(self.prop_plot_canvas[1])
-        else:
-            fzp_simulator.plot_2D(self.prop_plot_canvas[1], profile_1D, self.last_index)
+    def plot_1D(self, index, radius, profile_1D, replace=True, profile_name="z pos #1", control=False, color='blue'):
+        if self.prop_plot_canvas[index] is None:
+            self.prop_plot_canvas[index] = oasysgui.plotWindow(parent=None,
+                                              backend=None,
+                                              resetzoom=True,
+                                              autoScale=True,
+                                              logScale=True,
+                                              grid=True,
+                                              curveStyle=True,
+                                              colormap=False,
+                                              aspectRatio=False,
+                                              yInverted=False,
+                                              copy=True,
+                                              save=True,
+                                              print_=True,
+                                              control=control,
+                                              position=True,
+                                              roi=False,
+                                              mask=False,
+                                              fit=True)
+
+            self.prop_plot_canvas[index].setDefaultPlotLines(True)
+            self.prop_plot_canvas[index].setActiveCurveColor(color="#00008B")
+            self.prop_tab[index].layout().addWidget(self.prop_plot_canvas[index])
+
+        title  = "Radial Intensity Profile"
+        xtitle = "Radius [\u03bcm]"
+        ytitle = "Intensity [A.U.]"
+
+        self.prop_plot_canvas[index].setGraphTitle(title)
+        self.prop_plot_canvas[index].setGraphXLabel(xtitle)
+        self.prop_plot_canvas[index].setGraphYLabel(ytitle)
+
+        rcParams['axes.formatter.useoffset']='False'
+
+        self.prop_plot_canvas[index].addCurve(radius, profile_1D, profile_name, symbol='', color=color, xlabel=xtitle, ylabel=ytitle, replace=replace) #'+', '^', ','
+
+        self.prop_plot_canvas[index].setInteractiveMode('zoom', color='orange')
+        self.prop_plot_canvas[index].resetZoom()
+        self.prop_plot_canvas[index].replot()
+
+        self.prop_plot_canvas[index].setActiveCurve("Radial Intensity Profile")
+
+    def plot_2D(self, index, dataX, dataY, data2D):
+        origin = (dataX[0], dataY[0])
+        scale = (dataX[1] - dataX[0], dataY[1] - dataY[0])
+
+        colormap = {"name": "temperature", "normalization": "linear", "autoscale": True, "vmin": 0, "vmax": 0, "colors": 256}
+
+        if self.prop_plot_canvas[index] is None:
+            self.prop_plot_canvas[index] = Plot2D()
+
+            self.prop_plot_canvas[index].resetZoom()
+            self.prop_plot_canvas[index].setXAxisAutoScale(True)
+            self.prop_plot_canvas[index].setYAxisAutoScale(True)
+            self.prop_plot_canvas[index].setGraphGrid(False)
+            self.prop_plot_canvas[index].setKeepDataAspectRatio(True)
+            self.prop_plot_canvas[index].yAxisInvertedAction.setVisible(False)
+
+            self.prop_plot_canvas[index].setXAxisLogarithmic(False)
+            self.prop_plot_canvas[index].setYAxisLogarithmic(False)
+
+            self.prop_plot_canvas[index].getMaskAction().setVisible(False)
+            self.prop_plot_canvas[index].getRoiAction().setVisible(False)
+            self.prop_plot_canvas[index].getColormapAction().setVisible(True)
+            self.prop_plot_canvas[index].setKeepDataAspectRatio(False)
+
+            self.prop_tab[index].layout().addWidget(self.prop_plot_canvas[index])
+            
+        self.prop_plot_canvas[index].clear()
+        self.prop_plot_canvas[index].addImage(numpy.array(data2D),
+                             legend="rotated",
+                             scale=scale,
+                             origin=origin,
+                             colormap=colormap,
+                             replace=True)
+
+        self.prop_plot_canvas[index].setActiveImage("rotated")
+        self.prop_plot_canvas[index].setGraphXLabel("X [\u03bcm]")
+        self.prop_plot_canvas[index].setGraphYLabel("Z [\u03bcm]")
+        self.prop_plot_canvas[index].setGraphTitle("2D Intensity Profile")
+
 

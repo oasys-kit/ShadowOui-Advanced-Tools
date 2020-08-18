@@ -131,9 +131,6 @@ class FZPSimulatorOptions():
                  n_z=3,
                  with_multi_slicing=False,
                  n_slices=100,
-                 increment_resolution=True,
-                 reserved_points=500,
-                 increment_to_index=50,
                  with_complex_amplitude=False,
                  store_partial_results=True
                  ):
@@ -152,9 +149,6 @@ class FZPSimulatorOptions():
         self.n_z = n_z
         self.with_multi_slicing = with_multi_slicing
         self.n_slices = n_slices
-        self.increment_resolution = increment_resolution
-        self.reserved_points = reserved_points
-        self.increment_to_index = increment_to_index
         self.with_complex_amplitude = with_complex_amplitude
         self.store_partial_results = store_partial_results
 
