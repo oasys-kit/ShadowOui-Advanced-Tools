@@ -13,7 +13,7 @@ from srxraylib.util.inverse_method_sampler import Sampler2D
 
 from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowCompoundOpticalElement, ShadowBeam
 from orangecontrib.shadow.util.shadow_util import ShadowCongruence, ShadowPhysics, ShadowMath
-from orangecontrib.shadow_advanced_tools.util.zone_plates.fresnel_zone_plate_simulator import FZPAttributes, FZPSimulatorOptions, FresnelZonePlateSimulator
+from orangecontrib.shadow_advanced_tools.util.fresnel_zone_plates.fresnel_zone_plate_simulator import FZPAttributes, FZPSimulatorOptions, FresnelZonePlateSimulator
 
 from orangecontrib.shadow.widgets.gui.ow_generic_element import GenericElement
 
