@@ -77,7 +77,6 @@ def Efficiency_MGS(F_POS, map_d, profile_h, r, N, N_points=0):
 
     I_dens_0 = numpy.zeros(N)
     I_dens_0[numpy.where(profile_h != 0.j)] = 1.0
-    #I_dens_0[numpy.where(numpy.logical_or(numpy.real(profile_h) != 0.0, numpy.imag(profile_h) != 0.0))] = 1.0
     I_0 = numpy.trapz(numpy.multiply(r, I_dens_0), r)
     I   = numpy.trapz(numpy.multiply(r[0:N_points+1], map_d[N-1:(N+N_points), F_POS]), r[0:N_points+1])
 
