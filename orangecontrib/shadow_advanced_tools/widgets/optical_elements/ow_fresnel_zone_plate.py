@@ -66,7 +66,7 @@ class FresnelZonePlate(GenericElement):
     source_plane_distance = Setting(10.0)
     image_plane_distance = Setting(20.0)
 
-    height = Setting(20.0) # um
+    height = Setting(400.0) # nm
     diameter = Setting(50.0) # um
     b_min = Setting(50.0) # nm
     zone_plate_material = Setting('Au')
@@ -201,7 +201,7 @@ class FresnelZonePlate(GenericElement):
 
         oasysgui.lineEdit(zp_box, self, "b_min",  "Outermost Zone Width/Period [nm]", labelWidth=260, valueType=float, orientation="horizontal")
         oasysgui.lineEdit(zp_box, self, "diameter", "F.Z.P. Diameter [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(zp_box, self, "height",  "F.Z.P. Height [" + u"\u03BC" + "m]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(zp_box, self, "height",  "F.Z.P. Height [nm]", labelWidth=260, valueType=float, orientation="horizontal")
 
         gui.comboBox(zp_box, self, "zone_plate_type", label="Type of F.Z.P.", labelWidth=350,
                      items=["Ordinary", "Zone-Doubled", "Zone-Filled", "Two-Level"],
@@ -260,7 +260,7 @@ class FresnelZonePlate(GenericElement):
         self.set_SourceDistanceFlag()
 
         gui.comboBox(zp_box, self, "image_distance_flag", label="Image Distance", labelWidth=350,
-                     items=["Image Plane Distance", "Z.P. Image Distance"],
+                     items=["Image Plane Distance", "F.Z.P. Image Distance"],
                      callback=self.set_ImageDistanceFlag, sendSelectedValue=False, orientation="horizontal")
 
         self.set_ImageDistanceFlag()
@@ -495,7 +495,7 @@ class FresnelZonePlate(GenericElement):
                                                   n_slices=self.n_slices,
                                                   with_complex_amplitude=False,
                                                   store_partial_results=False)
-                    attributes = FZPAttributes(height=numpy.round(self.height*1e-6, 7),
+                    attributes = FZPAttributes(height=numpy.round(self.height*1e-9, 7),
                                                diameter=numpy.round(self.diameter*1e-6, 7),
                                                b_min=numpy.round(self.b_min*1e-9, 10),
                                                zone_plate_material=self.zone_plate_material,
