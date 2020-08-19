@@ -85,10 +85,11 @@ class FresnelZonePlate(GenericElement):
     osa_position = Setting(10.0) # user units
     osa_diameter =  Setting(30.0) # um
 
-    #source_distance_flag = Setting(0)
-    #source_distance = Setting(0.0)
+    source_distance_flag = Setting(0)
+    source_distance = Setting(0.0)
 
     image_distance_flag = Setting(1)
+    image_distance = Setting(0.0)
 
     with_multi_slicing = Setting(0)
     n_slices = Setting(100)
@@ -247,7 +248,6 @@ class FresnelZonePlate(GenericElement):
 
         self.set_WithOrderSortingAperture()
 
-        '''
         gui.comboBox(zp_box, self, "source_distance_flag", label="Source Distance", labelWidth=350,
                      items=["Same as Source Plane", "Different"],
                      callback=self.set_SourceDistanceFlag, sendSelectedValue=False, orientation="horizontal")
@@ -255,15 +255,12 @@ class FresnelZonePlate(GenericElement):
         self.zp_box_1 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
         self.zp_box_2 = oasysgui.widgetBox(zp_box, "", addSpace=False, orientation="vertical", height=30)
 
-
-
         self.le_source_distance = oasysgui.lineEdit(self.zp_box_1, self, "source_distance", "Source Distance", labelWidth=260, valueType=float, orientation="horizontal")
 
         self.set_SourceDistanceFlag()
-        '''
 
         gui.comboBox(zp_box, self, "image_distance_flag", label="Image Distance", labelWidth=350,
-                     items=["Image Plane Distance", "Z.P. Focal Distance"],
+                     items=["Image Plane Distance", "Z.P. Image Distance"],
                      callback=self.set_ImageDistanceFlag, sendSelectedValue=False, orientation="horizontal")
 
         self.set_ImageDistanceFlag()
@@ -330,6 +327,16 @@ class FresnelZonePlate(GenericElement):
         palette.setColor(QPalette.Text, QColor('dark blue'))
         palette.setColor(QPalette.Base, QColor(243, 240, 160))
         self.le_focal_distance.setPalette(palette)
+
+        self.le_image_distance = oasysgui.lineEdit(zp_out_box, self, "image_distance", "Image Distance (Q)", labelWidth=260, valueType=float, orientation="horizontal")
+        self.le_image_distance.setReadOnly(True)
+        font = QFont(self.le_image_distance.font())
+        font.setBold(True)
+        self.le_image_distance.setFont(font)
+        palette = QPalette(self.le_image_distance.palette()) # make a copy of the palette
+        palette.setColor(QPalette.Text, QColor('dark blue'))
+        palette.setColor(QPalette.Base, QColor(243, 240, 160))
+        self.le_image_distance.setPalette(palette)
 
         self.le_efficiency = oasysgui.lineEdit(zp_out_box, self, "efficiency", "Efficiency % (Avg. Wavelength)", labelWidth=260, valueType=float, orientation="horizontal")
         self.le_efficiency.setReadOnly(True)
@@ -471,8 +478,8 @@ class FresnelZonePlate(GenericElement):
 
                     self.progressBarSet(10)
 
-                    #if self.source_distance_flag == 0:
-                    #    self.source_distance = self.source_plane_distance
+                    if self.source_distance_flag == 0:
+                        self.source_distance = self.source_plane_distance
 
                     options = FZPSimulatorOptions(with_central_stop=self.with_central_stop==1,
                                                   cs_diameter=numpy.round(self.cs_diameter*1e-6, 7),
@@ -558,9 +565,11 @@ class FresnelZonePlate(GenericElement):
 
         label = self.le_osa_position.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
-        #label = self.le_source_distance.parent().layout().itemAt(0).widget()
-        #label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_source_distance.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
         label = self.le_focal_distance.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_image_distance.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
 
         # ADVANCED SETTINGS
@@ -689,15 +698,15 @@ class FresnelZonePlate(GenericElement):
         # raytracing of an ideal lens to focal position
         ideal_lens = ShadowOpticalElement.create_ideal_lens()
 
-        focal_distance = fzp_simulator.focal_distance/self.workspace_units_to_m
-        #focal_xz = 1 / ((1 / self.source_distance) + (1 / focal_distance))
+        focal_distance      = fzp_simulator.focal_distance/self.workspace_units_to_m
+        self.image_distance = numpy.round(1 / ((1 / focal_distance) - (1 / self.source_distance)), 6)
 
-        ideal_lens._oe.focal_x = focal_distance #focal_xz
-        ideal_lens._oe.focal_z = focal_distance #focal_xz
+        ideal_lens._oe.focal_x = focal_distance
+        ideal_lens._oe.focal_z = focal_distance
 
         ideal_lens._oe.user_units_to_cm = self.workspace_units_to_cm
         ideal_lens._oe.T_SOURCE         = 0.0
-        ideal_lens._oe.T_IMAGE          = focal_distance
+        ideal_lens._oe.T_IMAGE          = 0.0 # hybrid screen!
 
         output_beam = ShadowBeam.traceIdealLensOE(zone_plate_beam, ideal_lens, history=True)
 
@@ -745,15 +754,16 @@ class FresnelZonePlate(GenericElement):
 
         pos_dif_x, pos_dif_z = s2d.get_n_sampled_points(dx_ray.shape[1])
 
-        #correction to the position with the divergence kick from the waveoptics calculation
-        xx_image = output_beam._beam.rays[go, 0] + focal_distance * pos_dif_x # ray tracing to the image plane
-        zz_image = output_beam._beam.rays[go, 2] + focal_distance * pos_dif_z # ray tracing to the image plane
+        # new divergence distribution: convolution
+        dx_conv = dx_ray + numpy.arctan(pos_dif_x)  # add the ray divergence kicks
+        dz_conv = dz_ray + numpy.arctan(pos_dif_z)  # add the ray divergence kicks
+
+        # correction to the position with the divergence kick from the waveoptics calculation
+        # the correction is made on the positions at the hybrid screen (T_IMAGE = 0)
+        xx_image = output_beam._beam.rays[go, 0] + focal_distance * numpy.tan(dx_conv) # ray tracing to the image plane
+        zz_image = output_beam._beam.rays[go, 2] + focal_distance * numpy.tan(dz_conv) # ray tracing to the image plane
 
         output_beam._oe_number = self.input_beam._oe_number + 1
-
-        # new divergence distribution: convolution
-        dx_conv = numpy.arctan(pos_dif_x) + dx_ray  # add the ray divergence kicks
-        dz_conv = numpy.arctan(pos_dif_z) + dz_ray  # add the ray divergence kicks
 
         angle_num = numpy.sqrt(1 + (numpy.tan(dz_conv)) ** 2 + (numpy.tan(dx_conv)) ** 2)
 
@@ -764,14 +774,15 @@ class FresnelZonePlate(GenericElement):
         output_beam._beam.rays[go, 5] = numpy.tan(dz_conv) / angle_num
         #----------------------------------------------------------------------------------------
 
-        output_beam._beam.rays[go, 6] *= numpy.sqrt(efficiency)
-        output_beam._beam.rays[go, 7] *= numpy.sqrt(efficiency)
-        output_beam._beam.rays[go, 8] *= numpy.sqrt(efficiency)
-        output_beam._beam.rays[go, 15] *= numpy.sqrt(efficiency)
-        output_beam._beam.rays[go, 16] *= numpy.sqrt(efficiency)
-        output_beam._beam.rays[go, 17] *= numpy.sqrt(efficiency)
+        efficiency_factor = numpy.sqrt(efficiency)
+        output_beam._beam.rays[go, 6] *= efficiency_factor
+        output_beam._beam.rays[go, 7] *= efficiency_factor
+        output_beam._beam.rays[go, 8] *= efficiency_factor
+        output_beam._beam.rays[go, 15] *= efficiency_factor
+        output_beam._beam.rays[go, 16] *= efficiency_factor
+        output_beam._beam.rays[go, 17] *= efficiency_factor
 
-        if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - focal_distance)
+        if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - self.image_distance)
 
         self.plot_propagation_results(radius*1e6, data_1D, x*1e6, z*1e6, dif_xpzp)
 
