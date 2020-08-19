@@ -760,8 +760,10 @@ class FresnelZonePlate(GenericElement):
 
         # correction to the position with the divergence kick from the waveoptics calculation
         # the correction is made on the positions at the hybrid screen (T_IMAGE = 0)
-        xx_image = output_beam._beam.rays[go, 0] + focal_distance * numpy.tan(dx_conv) # ray tracing to the image plane
-        zz_image = output_beam._beam.rays[go, 2] + focal_distance * numpy.tan(dz_conv) # ray tracing to the image plane
+        image_distance = (self.image_distance if self.image_distance_flag==1 else self.image_plane_distance)
+
+        xx_image = output_beam._beam.rays[go, 0] + image_distance * numpy.tan(dx_conv) # ray tracing to the image plane
+        zz_image = output_beam._beam.rays[go, 2] + image_distance * numpy.tan(dz_conv) # ray tracing to the image plane
 
         output_beam._oe_number = self.input_beam._oe_number + 1
 
@@ -781,8 +783,6 @@ class FresnelZonePlate(GenericElement):
         output_beam._beam.rays[go, 15] *= efficiency_factor
         output_beam._beam.rays[go, 16] *= efficiency_factor
         output_beam._beam.rays[go, 17] *= efficiency_factor
-
-        if self.image_distance_flag==0: output_beam._beam.retrace(self.image_plane_distance - self.image_distance)
 
         self.plot_propagation_results(radius*1e6, data_1D, x*1e6, z*1e6, dif_xpzp)
 
