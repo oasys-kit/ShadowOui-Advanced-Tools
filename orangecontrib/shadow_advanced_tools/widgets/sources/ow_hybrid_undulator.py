@@ -970,10 +970,12 @@ class HybridUndulator(GenericElement):
             else:
                 integrated_flux = None
 
+                energy = self.energy if self.use_harmonic == 1 else self.resonance_energy(harmonic=self.harmonic_number)
+
                 if self.distribution_source == 0:
                     self.setStatusMessage("Running SRW")
 
-                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power = self.runSRWCalculation(self.energy, do_cumulated_calculations)
+                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power = self.runSRWCalculation(energy, do_cumulated_calculations)
                 elif self.distribution_source == 1:
                     self.setStatusMessage("Loading SRW files")
 
@@ -1125,7 +1127,7 @@ class HybridUndulator(GenericElement):
         shadow_src.src.F_COLOR = 1 # single value
         shadow_src.src.F_PHOT = 0 # eV , 1 Angstrom
 
-        shadow_src.src.PH1 = self.energy if self.use_harmonic==1 else self.resonance_energy(harmonic=self.harmonic_number)
+        shadow_src.src.PH1 = self.energy if self.use_harmonic !=0 else self.resonance_energy(harmonic=self.harmonic_number)
 
         shadow_src.src.F_POLAR = self.polarization
 
