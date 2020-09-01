@@ -109,6 +109,7 @@ class TotalFilterCalculator(widget.OWWidget):
     n_dif_2 = Setting(0)
     n_mul_1 = Setting(0)
     n_mul_2 = Setting(0)
+    abs_tran = Setting(1)
 
     energy_from = Setting(1000.0)
     energy_to   = Setting(51000.0)
@@ -141,31 +142,32 @@ class TotalFilterCalculator(widget.OWWidget):
 
         items = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
-        def build_combo(container, master, field_name, label, has_combo=True):
+        def build_combo(container, master, field_name, label, has_combo=True, combo_field_name=None, cb_items=items):
             box = gui.widgetBox(container, "", orientation="horizontal")
-            gui.checkBox(box, master, "check_" + field_name[2:], label="" if has_combo else label)
-            if has_combo: gui.comboBox(box, master, field_name, label=label, items=items, labelWidth=350, sendSelectedValue=False, orientation="horizontal")
+            gui.checkBox(box, master, "check_" + field_name, label="" if has_combo else label)
+            if has_combo: gui.comboBox(box, master, "n_" + field_name if not combo_field_name else combo_field_name,
+                                       label=label, items=cb_items, labelWidth=350, sendSelectedValue=False, orientation="horizontal")
             box.setEnabled(False)
 
             return box
 
-        self.cb_ref_1 = build_combo(box1, self, "n_ref_1", label="Nr. of Mirror Reflectivity #1")
-        self.cb_ref_2 = build_combo(box1, self, "n_ref_2", label="Nr. of Mirror Reflectivity #2")
-        self.cb_ref_3 = build_combo(box1, self, "n_ref_3", label="Nr. of Mirror Reflectivity #3")
+        self.cb_ref_1 = build_combo(box1, self, "ref_1", label="Nr. of Mirror Reflectivity #1")
+        self.cb_ref_2 = build_combo(box1, self, "ref_2", label="Nr. of Mirror Reflectivity #2")
+        self.cb_ref_3 = build_combo(box1, self, "ref_3", label="Nr. of Mirror Reflectivity #3")
 
         gui.separator(box1)
 
-        self.cb_dif_1 = build_combo(box1, self, "n_dif_1", label="Nr. of Diffraction Profile #1")
-        self.cb_dif_2 = build_combo(box1, self, "n_dif_2", label="Nr. of Diffraction Profile #2")
+        self.cb_dif_1 = build_combo(box1, self, "dif_1", label="Nr. of Diffraction Profile #1")
+        self.cb_dif_2 = build_combo(box1, self, "dif_2", label="Nr. of Diffraction Profile #2")
 
         gui.separator(box1)
 
-        self.cb_mul_1 = build_combo(box1, self, "n_mul_1", label="Nr. of MultiLayer Reflectivity #1")
-        self.cb_mul_2 = build_combo(box1, self, "n_mul_2", label="Nr. of MultiLayer Reflectivity #2")
+        self.cb_mul_1 = build_combo(box1, self, "mul_1", label="Nr. of MultiLayer Reflectivity #1")
+        self.cb_mul_2 = build_combo(box1, self, "mul_2", label="Nr. of MultiLayer Reflectivity #2")
 
         gui.separator(box1)
 
-        self.cb_pow_1 = build_combo(box1, self, "n_pow_1", label="Power Widget Input", has_combo=False)
+        self.cb_pow_1 = build_combo(box1, self, "pow_1", label="Power Widget Input", combo_field_name="abs_tran", cb_items=["Absorbed", "Transmitted"])
 
         gui.rubber(self.controlArea)
 
@@ -255,7 +257,11 @@ class TotalFilterCalculator(widget.OWWidget):
 
             data = numpy.zeros((len(energies), 2))
             data[:, 0] = energies
-            data[:, 1] = xoppy_data[:, -1] / xoppy_data[:, 1]
+
+            if self.abs_tran == 0: # absorbed
+                data[:, 1] = 1 - xoppy_data[:, -1] / xoppy_data[:, 1]
+            elif self.abs_tran == 1: # transmitted
+                data[:, 1] = xoppy_data[:, -1] / xoppy_data[:, 1]
 
             return data
         except Exception as e:
