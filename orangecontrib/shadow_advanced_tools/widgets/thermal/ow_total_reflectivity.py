@@ -258,10 +258,7 @@ class TotalFilterCalculator(widget.OWWidget):
             data = numpy.zeros((len(energies), 2))
             data[:, 0] = energies
 
-            if self.abs_tran == 0: # absorbed
-                data[:, 1] = 1 - xoppy_data[:, -1] / xoppy_data[:, 1]
-            elif self.abs_tran == 1: # transmitted
-                data[:, 1] = xoppy_data[:, -1] / xoppy_data[:, 1]
+            data[:, 1] = xoppy_data[:, -1] / xoppy_data[:, 1]
 
             return data
         except Exception as e:
@@ -295,8 +292,12 @@ class TotalFilterCalculator(widget.OWWidget):
     def set_mul_2(self, exchange_data): self.__set_data(exchange_data, self.__get_multilayer_reflectivity, "mul_2", self.cb_mul_2)
     def set_pow_1(self, exchange_data): self.__set_data(exchange_data, self.__get_power_data,              "pow_1", self.cb_pow_1)
 
-    def __add_data_to_total_filter(self, total_reflectivity, data, nr_data, check):
-        if not data is None and check==1: total_reflectivity[:, 1] *= numpy.interp(total_reflectivity[:, 0], data[:, 0], data[:, 1])**(nr_data+1)
+    def __add_data_to_total_filter(self, total_filter, data, nr_data, check, absorbed=False):
+        if not data is None and check==1:
+            if absorbed:
+                total_filter[:, 1] *= numpy.interp(total_filter[:, 0], data[:, 0], 1 - data[:, 1]) ** (nr_data + 1)
+            else:
+                total_filter[:, 1] *= numpy.interp(total_filter[:, 0], data[:, 0], data[:, 1]) ** (nr_data + 1)
 
     def calculate_total_filter(self):
         try:
@@ -320,7 +321,7 @@ class TotalFilterCalculator(widget.OWWidget):
             self.__add_data_to_total_filter(total_filter, self.mul_1, self.n_mul_1, self.check_mul_1)
             self.__add_data_to_total_filter(total_filter, self.mul_2, self.n_mul_2, self.check_mul_2)
 
-            self.__add_data_to_total_filter(total_filter, self.pow_1, 1, self.check_pow_1)
+            self.__add_data_to_total_filter(total_filter, self.pow_1, 0, self.check_pow_1, absorbed=self.abs_tran==0)
 
             total_filter[numpy.where(numpy.isnan(total_filter))] = 0.0
 
