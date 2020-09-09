@@ -91,6 +91,8 @@ class FresnelZonePlate(GenericElement):
     image_distance_flag = Setting(1)
     image_distance = Setting(0.0)
 
+    multipool = Setting(1)
+
     with_multi_slicing = Setting(0)
     n_slices = Setting(100)
 
@@ -281,6 +283,7 @@ class FresnelZonePlate(GenericElement):
         '''
 
         oasysgui.lineEdit(prop_box, self, "n_points", "Nr. Sampling Points", labelWidth=260, valueType=int, orientation="horizontal")
+
         oasysgui.lineEdit(prop_box, self, "last_index", "Last Index of Focal Image", labelWidth=260, valueType=int, orientation="horizontal")
 
         gui.separator(prop_box)
@@ -295,6 +298,12 @@ class FresnelZonePlate(GenericElement):
         oasysgui.lineEdit(self.res_box_1, self, "increase_points", "Nr. Points", labelWidth=260, valueType=int, orientation="horizontal")
 
         self.set_IncreaseResolution()
+
+        gui.separator(prop_box)
+
+        gui.comboBox(prop_box, self, "multipool", label="Parallel Computing", labelWidth=350,
+                     items=["No", "Yes"], sendSelectedValue=False, orientation="horizontal")
+
 
         zp_out_box = oasysgui.widgetBox(tab_zone_plate_3, "Output Parameters", addSpace=False, orientation="vertical", height=270)
 
@@ -508,7 +517,7 @@ class FresnelZonePlate(GenericElement):
                     self.avg_energy = numpy.round(ShadowPhysics.getEnergyFromShadowK(numpy.average(zone_plate_beam._beam.rays[numpy.where(zone_plate_beam._beam.rays[:, 9] == GOOD), 10])), 2)
 
                     fzp_simulator = FresnelZonePlateSimulator(attributes=attributes, options=options)
-                    fzp_simulator.initialize(energy_in_KeV=self.avg_energy/1000, n_points=self.n_points)
+                    fzp_simulator.initialize(energy_in_KeV=self.avg_energy/1000, n_points=self.n_points, multipool=self.multipool==1)
 
                     self.number_of_zones = fzp_simulator.n_zones
                     self.focal_distance = numpy.round(fzp_simulator.focal_distance/self.workspace_units_to_m, 6)

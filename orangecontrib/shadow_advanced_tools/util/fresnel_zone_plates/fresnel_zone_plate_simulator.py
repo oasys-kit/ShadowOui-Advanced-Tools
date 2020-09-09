@@ -182,12 +182,13 @@ class FresnelZonePlateSimulator(object):
         self.__options = options
         self.__attributes = attributes
 
-    def initialize(self, energy_in_KeV=8.0, n_points=5000):
+    def initialize(self, energy_in_KeV=8.0, n_points=5000, multipool=True):
         at = self.__attributes
         op = self.__options
 
         if energy_in_KeV <= 0: raise ValueError("Energy must be > 0")
         if n_points <= 0: raise ValueError("Number of integration points must be > 0")
+        if n_points > 200000: raise ValueError("Number of integration points must be <= 200000")
 
         if at.height <= 0: raise ValueError("ZP Height must be > 0")
         if at.b_min <= 0: raise ValueError("ZP outermost zone width must be > 0")
@@ -201,6 +202,7 @@ class FresnelZonePlateSimulator(object):
 
         self.energy_in_KeV = energy_in_KeV
         self.n_points = n_points
+        self.multipool = multipool
 
         self.wavelength = 12.398 / energy_in_KeV * 1e-10  # wavelength [m]
         self.k = 2 * numpy.pi / self.wavelength  # wavevector [m-1]
@@ -272,7 +274,7 @@ class FresnelZonePlateSimulator(object):
         if op.store_partial_results:
             map_int[0, :] = numpy.multiply(numpy.abs(field0), numpy.abs(field0))
             map_complex[0, :] = field0[0: self.n_points]
-        four0 = hankel_transform(field0, self.max_radius, c)
+        four0 = hankel_transform(field0, self.max_radius, c, multipool=self.multipool)
         field0 = profile_h
 
         if op.with_multi_slicing: four0 = self.__propagate_multislicing(map_int, map_complex, field0, four0, q_max, q, c)
@@ -550,14 +552,14 @@ class FresnelZonePlateSimulator(object):
             proj = numpy.exp(-1j * step_slice * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
 
             fun = numpy.multiply(proj, four0)
-            field = hankel_transform(fun, q_max, c)
+            field = hankel_transform(fun, q_max, c, multipool=self.multipool)
             fun = numpy.multiply(field0, field)
 
             if store_partial_results:
                 map_int[1 + n, :] = numpy.multiply(numpy.abs(fun), numpy.abs(fun))
                 map_complex[1 + n, :] = fun
 
-            four0 = hankel_transform(fun, self.max_radius, c, self.n_zeros)
+            four0 = hankel_transform(fun, self.max_radius, c, n_zeros=self.n_zeros, multipool=self.multipool)
 
         return four0
 
@@ -625,7 +627,7 @@ class FresnelZonePlateSimulator(object):
 
         proj = numpy.exp(-1j * z * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
         fun = numpy.multiply(proj, four0)
-        four11 = hankel_transform(fun, q_max, c)
+        four11 = hankel_transform(fun, q_max, c, multipool=self.multipool)
 
         if store_partial_results:
             map_int[map_index + self.n_slices, :] = numpy.multiply(numpy.abs(four11), numpy.abs(four11))
@@ -644,13 +646,13 @@ class FresnelZonePlateSimulator(object):
         # --------------------------------------------------------------------------
         proj_OSA = numpy.exp(-1j * op.osa_position * ((2 * numpy.pi * q) ** 2) / (2 * self.k))
         fun = numpy.multiply(proj_OSA, four0)
-        field_OSA = hankel_transform(fun, q_max, c)
+        field_OSA = hankel_transform(fun, q_max, c, multipool=self.multipool)
 
         # Inserting OSA
         # --------------------------------------------------------------------------
         OSA_pix = int(numpy.floor(op.osa_diameter / self.step) - 1)
         field_OSA[int(OSA_pix / 2) + 1:self.n_points] = 0
-        four_OSA = hankel_transform(field_OSA, self.max_radius, c)
+        four_OSA = hankel_transform(field_OSA, self.max_radius, c, multipool=self.multipool)
 
         return four_OSA
 
