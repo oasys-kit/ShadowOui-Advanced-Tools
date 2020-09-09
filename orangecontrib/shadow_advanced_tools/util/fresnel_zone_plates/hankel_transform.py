@@ -81,7 +81,6 @@ def hankel_transform(wavefield, max_radius, bessel_zeros, n_zeros=0, multipool=T
         p = multiprocessing.Pool(__N_CPU)
         result = numpy.concatenate(p.map(__calculate, args))
         p.close()
-
     else:
         result = numpy.full(n, 0j)
 
