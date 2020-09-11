@@ -188,7 +188,6 @@ class FresnelZonePlateSimulator(object):
 
         if energy_in_KeV <= 0.0: raise ValueError("Energy must be > 0")
         if n_points <= 0: raise ValueError("Number of integration points must be > 0")
-        if n_points > 200000: raise ValueError("Number of integration points must be <= 200000")
 
         if at.height <= 0.0: raise ValueError("ZP Height must be > 0")
         if at.b_min <= 0.0: raise ValueError("ZP outermost zone width must be > 0")
