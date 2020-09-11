@@ -42,8 +42,4 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE         #
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # #########################################################################
-import os
-import orangecanvas.resources as resources
-import scipy.io
 
-bessel_zeros = scipy.io.loadmat(os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.util.fresnel_zone_plates"), "data", "c_zeros.mat"))

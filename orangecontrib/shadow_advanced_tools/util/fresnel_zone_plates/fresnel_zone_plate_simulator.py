@@ -73,11 +73,11 @@ except:
     pass
 
 from scipy import interpolate
+from scipy.special import jn_zeros
 
 from oasys.widgets import gui as oasysgui
 from silx.gui.plot import Plot2D
 
-from orangecontrib.shadow_advanced_tools.util.fresnel_zone_plates import bessel_zeros
 from orangecontrib.shadow_advanced_tools.util.fresnel_zone_plates.hankel_transform import hankel_transform
 from orangecontrib.shadow_advanced_tools.util.fresnel_zone_plates.refractive_index import get_delta_beta
 
@@ -186,19 +186,19 @@ class FresnelZonePlateSimulator(object):
         at = self.__attributes
         op = self.__options
 
-        if energy_in_KeV <= 0: raise ValueError("Energy must be > 0")
+        if energy_in_KeV <= 0.0: raise ValueError("Energy must be > 0")
         if n_points <= 0: raise ValueError("Number of integration points must be > 0")
         if n_points > 200000: raise ValueError("Number of integration points must be <= 200000")
 
-        if at.height <= 0: raise ValueError("ZP Height must be > 0")
-        if at.b_min <= 0: raise ValueError("ZP outermost zone width must be > 0")
-        if at.diameter <= 0: raise ValueError("ZP Diameter must be > 0")
+        if at.height <= 0.0: raise ValueError("ZP Height must be > 0")
+        if at.b_min <= 0.0: raise ValueError("ZP outermost zone width must be > 0")
+        if at.diameter <= 0.0: raise ValueError("ZP Diameter must be > 0")
 
         if op.zone_plate_type in [1, 2]:
-            if op.width_coating <= 0: raise ValueError("Coating Width must be > 0")
+            if op.width_coating <= 0.0: raise ValueError("Coating Width must be > 0")
         if op.zone_plate_type == 3:
-            if op.height1_factor <= 0: raise ValueError("Height 1 Factor must be > 0")
-            if op.height2_factor <= 0: raise ValueError("Height 2 Factor must be > 0")
+            if op.height1_factor <= 0.0: raise ValueError("Height 1 Factor must be > 0")
+            if op.height2_factor <= 0.0: raise ValueError("Height 2 Factor must be > 0")
 
         self.energy_in_KeV = energy_in_KeV
         self.n_points = n_points
@@ -244,9 +244,8 @@ class FresnelZonePlateSimulator(object):
 
         profile, membrane_transmission = self.__build_zone_plate_profile()
 
-        # Loading the position of the zeros, as much position as N+1. The file
-        # c.mat contains up to 200000 zeros of the 1st order Bessel function.
-        c = bessel_zeros['c'][0, :self.n_points + 1]
+        # Loading the position of the zeros of the 1st order Bessel function, as much position as N+1.
+        c = jn_zeros(0, self.n_points + 1)
 
         # Definition of the position where the calculated input and transformed
         # functions are evaluated. We define also the maximum frequency in the
