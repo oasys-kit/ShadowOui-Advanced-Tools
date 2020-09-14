@@ -673,6 +673,7 @@ class FresnelZonePlateSimulator(object):
         return numpy.divide(I, I_0)
 
 from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout
+import time
 
 if __name__ == "__main__":
     app = QApplication([])
@@ -688,9 +689,15 @@ if __name__ == "__main__":
                                                                n_slices=3),
                                    attributes=FZPAttributes())
 
-    zs.initialize(energy_in_KeV=8.0, n_points=10000)
+    zs.initialize(energy_in_KeV=8.0, n_points=5000, multipool=True)
+
+    t0 = time.time()
 
     map_int, _, efficiency = zs.simulate()
+
+    t1 = time.time()
+
+    print(("Time:" + str(t1-t0)))
 
     print("Efficiency:", efficiency)
 
