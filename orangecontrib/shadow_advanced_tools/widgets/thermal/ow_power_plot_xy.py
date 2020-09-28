@@ -793,7 +793,6 @@ class PowerPlotXY(AutomaticElement):
             self.image_box.layout().addWidget(self.plot_canvas)
 
         try:
-
             if self.autosave == 1:
                 if self.autosave_file is None:
                     self.autosave_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(self.autosave_file_name))
@@ -871,26 +870,37 @@ class PowerPlotXY(AutomaticElement):
     def plot_xy(self, var_x, var_y):
         beam_to_plot = self.input_beam
 
-        if self.image_plane == 1:
-            new_shadow_beam = self.input_beam.duplicate(history=False)
+        if ShadowCongruence.checkGoodBeam(beam_to_plot):
+            if self.image_plane == 1:
+                new_shadow_beam = self.input_beam.duplicate(history=False)
 
-            if self.image_plane_rel_abs_position == 1:  # relative
-                dist = self.image_plane_new_position
-            else:  # absolute
-                if self.input_beam.historySize() == 0:
-                    historyItem = None
-                else:
-                    historyItem = self.input_beam.getOEHistory(oe_number=self.input_beam._oe_number)
+                if self.image_plane_rel_abs_position == 1:  # relative
+                    dist = self.image_plane_new_position
+                else:  # absolute
+                    if self.input_beam.historySize() == 0:
+                        historyItem = None
+                    else:
+                        historyItem = self.input_beam.getOEHistory(oe_number=self.input_beam._oe_number)
 
-                if historyItem is None: image_plane = 0.0
-                elif self.input_beam._oe_number == 0: image_plane = 0.0
-                else: image_plane = historyItem._shadow_oe_end._oe.T_IMAGE
+                    if historyItem is None: image_plane = 0.0
+                    elif self.input_beam._oe_number == 0: image_plane = 0.0
+                    else: image_plane = historyItem._shadow_oe_end._oe.T_IMAGE
 
-                dist = self.image_plane_new_position - image_plane
+                    dist = self.image_plane_new_position - image_plane
 
-            self.retrace_beam(new_shadow_beam, dist)
+                self.retrace_beam(new_shadow_beam, dist)
 
-            beam_to_plot = new_shadow_beam
+                beam_to_plot = new_shadow_beam
+        else:
+            # no good rays in the region of interest: creates a 0 power step with 1 good ray
+            beam_to_plot._beam.rays[0, 9] = 1 # convert to good rays
+
+            beam_to_plot._beam.rays[:, 6] = 0.0
+            beam_to_plot._beam.rays[:, 7] = 0.0
+            beam_to_plot._beam.rays[:, 8] = 0.0
+            beam_to_plot._beam.rays[:, 15] = 0.0
+            beam_to_plot._beam.rays[:, 16] = 0.0
+            beam_to_plot._beam.rays[:, 17] = 0.0
 
         xrange, yrange = self.get_ranges()
 

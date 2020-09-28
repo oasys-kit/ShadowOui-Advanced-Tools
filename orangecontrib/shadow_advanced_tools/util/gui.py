@@ -638,10 +638,10 @@ class PowerPlotXYWidget(QWidget):
             average_power_density = numpy.average(histogram[numpy.where(histogram > 0.0)])
 
             title = "Power Density [W/mm\u00b2] from " + str(round(energy_min, 2)) + " to " + str(round(energy_max+energy_step, 2)) + " [eV], Current Step: " + str(round(energy_step, 2)) + "\n" + \
-                    "Power [W]: Plotted=" + str(round(self.cumulated_power_plot, 2)) + \
-                    ", Incident=" + str(round(self.cumulated_previous_power_plot, 2)) + \
-                    ", Total=" + str(round(cumulated_total_power, 2)) + \
-                    ", <P.D.>=" + str(round(average_power_density, 2)) + " W/mm\u00b2"
+                    "Power [W]: Plotted=" + str(round(self.cumulated_power_plot, 3)) + \
+                    ", Incident=" + str(round(self.cumulated_previous_power_plot, 3)) + \
+                    ", Total=" + str(round(cumulated_total_power, 3)) + \
+                    ", <P.D.>=" + str(round(average_power_density, 3)) + " W/mm\u00b2"
 
             xx = ticket['bin_h_center']
             yy = ticket['bin_v_center']
