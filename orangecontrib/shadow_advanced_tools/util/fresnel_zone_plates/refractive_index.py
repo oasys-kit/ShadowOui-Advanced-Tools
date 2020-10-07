@@ -3578,7 +3578,3 @@ def get_delta_beta(energy_in_KeV, material, xraylib_only=True):
         beta  = numpy.interp([energy_in_KeV * 1000], data[:, 0], data[:, 2])[0]
 
     return delta, beta
-
-for i in range(len(REFRACTIVE_DATA["Ni"])):
-    el = REFRACTIVE_DATA["Ni"][i]
-    if len(el) != 3: print(i)
