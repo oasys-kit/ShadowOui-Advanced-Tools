@@ -863,7 +863,7 @@ class PowerPlotXY(AutomaticElement):
 
         except Exception as e:
             if not self.IS_DEVELOP:
-                raise Exception("Data not plottable: No good rays or bad content")
+                raise Exception("Data not plottable: " + str(e))
             else:
                 raise e
 
