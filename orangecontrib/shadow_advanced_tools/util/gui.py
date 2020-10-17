@@ -468,20 +468,20 @@ class PowerPlotXYWidget(QWidget):
 
         self.setLayout(QVBoxLayout())
 
-    def manage_empty_beam(self, ticket_to_add, nbins, xrange, yrange, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image, to_mm):
+    def manage_empty_beam(self, ticket_to_add, nbins_h, nbins_v, xrange, yrange, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image, to_mm):
         if not ticket_to_add is None:
             ticket      = copy.deepcopy(ticket_to_add)
             last_ticket = copy.deepcopy(ticket_to_add)
         else:
             ticket = {}
-            ticket["histogram"] = numpy.zeros((nbins, nbins))
-            ticket['intensity'] = numpy.zeros((nbins, nbins))
+            ticket["histogram"] = numpy.zeros((nbins_h, nbins_v))
+            ticket['intensity'] = numpy.zeros((nbins_h, nbins_v))
             ticket['nrays']     = 0
             ticket['good_rays'] = 0
 
             if not xrange is None and not yrange is None:
-                ticket['bin_h_center'] = numpy.arange(xrange[0], xrange[1], nbins)*to_mm
-                ticket['bin_v_center'] = numpy.arange(yrange[0], yrange[1], nbins)*to_mm
+                ticket['bin_h_center'] = numpy.arange(xrange[0], xrange[1], nbins_h)*to_mm
+                ticket['bin_v_center'] = numpy.arange(yrange[0], yrange[1], nbins_v)*to_mm
             else:
                 raise ValueError("Beam is empty and no range has been specified: Calculation is impossible")
 
@@ -493,7 +493,7 @@ class PowerPlotXYWidget(QWidget):
             return ticket, None
 
     def plot_power_density(self, shadow_beam, var_x, var_y, total_power, cumulated_total_power, energy_min, energy_max, energy_step,
-                           nbins=100, xrange=None, yrange=None, nolost=1, ticket_to_add=None, to_mm=1.0, show_image=True,
+                           nbins_h=100, nbins_v=100, xrange=None, yrange=None, nolost=1, ticket_to_add=None, to_mm=1.0, show_image=True,
                            kind_of_calculation=0,
                            replace_poor_statistic=0,
                            good_rays_limit=100,
@@ -507,7 +507,8 @@ class PowerPlotXYWidget(QWidget):
 
         if n_rays == 0:
             return self.manage_empty_beam(ticket_to_add,
-                                          nbins,
+                                          nbins_h,
+                                          nbins_v,
                                           xrange,
                                           yrange,
                                           var_x,
@@ -526,7 +527,7 @@ class PowerPlotXYWidget(QWidget):
         if shadow_beam.scanned_variable_data and shadow_beam.scanned_variable_data.has_additional_parameter("incident_power"):
             self.cumulated_previous_power_plot += shadow_beam.scanned_variable_data.get_additional_parameter("incident_power")
         elif not history_item is None and not history_item._input_beam is None:
-            previous_ticket = history_item._input_beam._beam.histo2(var_x, var_y, nbins=nbins, xrange=None, yrange=None, nolost=1, ref=23)
+            previous_ticket = history_item._input_beam._beam.histo2(var_x, var_y, nbins_h=nbins_h, nbins_v=nbins_v, xrange=None, yrange=None, nolost=1, ref=23)
             previous_ticket['histogram'] *= (total_power/n_rays) # power
 
             self.cumulated_previous_power_plot += previous_ticket['histogram'].sum()
@@ -573,7 +574,8 @@ class PowerPlotXYWidget(QWidget):
 
         if len(beam.rays) == 0:
             return self.manage_empty_beam(ticket_to_add,
-                                          nbins,
+                                          nbins_h,
+                                          nbins_v,
                                           xrange,
                                           yrange,
                                           var_x,
@@ -585,7 +587,7 @@ class PowerPlotXYWidget(QWidget):
                                           show_image,
                                           to_mm)
 
-        ticket = beam.histo2(var_x, var_y, nbins=nbins, xrange=xrange, yrange=yrange, nolost=1 if nolost != 2 else 2, ref=23)
+        ticket = beam.histo2(var_x, var_y, nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=1 if nolost != 2 else 2, ref=23)
 
         ticket['bin_h_center'] *= to_mm
         ticket['bin_v_center'] *= to_mm

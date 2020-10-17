@@ -104,7 +104,8 @@ class PowerPlotXY(AutomaticElement):
     y_range_max=Setting(0.0)
 
     rays=Setting(1)
-    number_of_bins=Setting(100)
+    number_of_bins=Setting(100) # for retrocompatibility: I don't change the name
+    number_of_bins_v=Setting(100)
 
     title=Setting("X,Z")
 
@@ -257,9 +258,10 @@ class PowerPlotXY(AutomaticElement):
 
         self.set_autosave()
 
-        histograms_box = oasysgui.widgetBox(tab_gen, "Histograms settings", addSpace=True, orientation="vertical", height=270)
+        histograms_box = oasysgui.widgetBox(tab_gen, "Histograms settings", addSpace=True, orientation="vertical", height=300)
 
-        oasysgui.lineEdit(histograms_box, self, "number_of_bins", "Number of Bins", labelWidth=250, valueType=int, orientation="horizontal")
+        oasysgui.lineEdit(histograms_box, self, "number_of_bins", "Number of Bins H", labelWidth=250, valueType=int, orientation="horizontal")
+        oasysgui.lineEdit(histograms_box, self, "number_of_bins_v", "Number of Bins V", labelWidth=250, valueType=int, orientation="horizontal")
 
         gui.separator(histograms_box)
 
@@ -787,7 +789,7 @@ class PowerPlotXY(AutomaticElement):
 
                 if self.IS_DEVELOP: raise exception
 
-    def replace_fig(self, shadow_beam, var_x, var_y, xrange, yrange, nbins, nolost):
+    def replace_fig(self, shadow_beam, var_x, var_y, xrange, yrange, nbins_h, nbins_v, nolost):
         if self.plot_canvas is None:
             self.plot_canvas = PowerPlotXYWidget()
             self.image_box.layout().addWidget(self.plot_canvas)
@@ -804,7 +806,7 @@ class PowerPlotXY(AutomaticElement):
                 self.cumulated_ticket, last_ticket = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
                                                                                          self.total_power, self.cumulated_total_power,
                                                                                          self.energy_min, self.energy_max, self.energy_step,
-                                                                                         nbins=nbins, xrange=xrange, yrange=yrange, nolost=nolost,
+                                                                                         nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=nolost,
                                                                                          ticket_to_add=self.cumulated_ticket,
                                                                                          to_mm=self.workspace_units_to_mm,
                                                                                          show_image=self.view_type==1,
@@ -840,7 +842,7 @@ class PowerPlotXY(AutomaticElement):
                 ticket, _ = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
                                                                 self.total_power, self.cumulated_total_power,
                                                                 self.energy_min, self.energy_max, self.energy_step,
-                                                                nbins=nbins, xrange=xrange, yrange=yrange, nolost=nolost,
+                                                                nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=nolost,
                                                                 to_mm=self.workspace_units_to_mm,
                                                                 show_image=self.view_type==1,
                                                                 kind_of_calculation=self.kind_of_calculation,
@@ -904,7 +906,12 @@ class PowerPlotXY(AutomaticElement):
 
         xrange, yrange = self.get_ranges()
 
-        self.replace_fig(beam_to_plot, var_x, var_y, xrange=xrange, yrange=yrange, nbins=int(self.number_of_bins), nolost=self.rays+1)
+        self.replace_fig(beam_to_plot, var_x, var_y,
+                         xrange=xrange,
+                         yrange=yrange,
+                         nbins_h=int(self.number_of_bins),
+                         nbins_v=int(self.number_of_bins_v),
+                         nolost=self.rays+1)
 
     def get_ranges(self):
         xrange = None
