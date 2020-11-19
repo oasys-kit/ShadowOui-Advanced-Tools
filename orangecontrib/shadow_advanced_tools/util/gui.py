@@ -541,13 +541,25 @@ class PowerPlotXYWidget(QWidget):
                 previous_beam = previous_beam if previous_beam else history_item._input_beam.duplicate(history=False)
 
                 if nolost==2:
-                    lost = numpy.where(current_beam._beam.rays[:, 9] != 1)
+                    current_lost_rays_cursor = numpy.where(current_beam._beam.rays[:, 9] != 1)
 
-                    current_lost_rays = current_beam._beam.rays[lost]
-                    lost_rays_in_previous = previous_beam._beam.rays[lost]
+                    current_lost_rays          = current_beam._beam.rays[current_lost_rays_cursor]
+                    lost_rays_in_previous_beam = previous_beam._beam.rays[current_lost_rays_cursor]
+
+                    lost_that_were_good_rays_cursor = numpy.where(lost_rays_in_previous_beam[:, 9] == 1)
 
                     beam = Beam()
-                    beam.rays = current_lost_rays[numpy.where(lost_rays_in_previous[:, 9] == 1)]# lost rays that were good after the previous OE
+                    beam.rays = current_lost_rays[lost_that_were_good_rays_cursor] # lost rays that were good after the previous OE
+
+                    # in case of filters, Shadow computes the absorption for lost rays. This cause an imbalance on the total power.
+                    # the lost rays that were good must have the same intensity they had before the optical element.
+
+                    beam.rays[:, 6]  = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 6]
+                    beam.rays[:, 7]  = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 7]
+                    beam.rays[:, 8]  = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 8]
+                    beam.rays[:, 15] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 15]
+                    beam.rays[:, 16] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 16]
+                    beam.rays[:, 17] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 17]
                 else:
                     incident_rays = previous_beam._beam.rays
                     transmitted_rays = current_beam._beam.rays
