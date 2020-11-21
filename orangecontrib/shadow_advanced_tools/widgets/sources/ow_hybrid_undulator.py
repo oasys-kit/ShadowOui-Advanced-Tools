@@ -1367,7 +1367,7 @@ class HybridUndulator(GenericElement):
         source_dimension_wf_v_slit_gap = self.get_source_slit_data(direction="b")
 
         wfr.allocate(1, source_dimension_wf_h_slit_points, source_dimension_wf_v_slit_points) #Numbers of points vs Photon Energy, Horizontal and Vertical Positions
-        wfr.mesh.zStart = self.source_dimension_wf_distance - self.longitudinal_central_position #Longitudinal Position [m] from Center of Straight Section at which SR has to be calculated
+        wfr.mesh.zStart = self.source_dimension_wf_distance + self.longitudinal_central_position #Longitudinal Position [m] from Center of Straight Section at which SR has to be calculated
         wfr.mesh.eStart = energy  #Initial Photon Energy [eV]
         wfr.mesh.eFin = wfr.mesh.eStart #Final Photon Energy [eV]
 
