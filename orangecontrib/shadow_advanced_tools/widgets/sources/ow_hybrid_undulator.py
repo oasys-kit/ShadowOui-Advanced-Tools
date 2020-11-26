@@ -61,7 +61,7 @@ from orangewidget.settings import Setting
 from oasys.widgets import gui as oasysgui
 from oasys.widgets import congruence
 from orangewidget import widget
-from oasys.util.oasys_util import TriggerOut, EmittingStream
+from oasys.util.oasys_util import TriggerOut, EmittingStream, get_fwhm, get_sigma
 
 from syned.beamline.beamline import Beamline
 from syned.beamline.optical_elements.absorbers.slit import Slit
@@ -165,6 +165,13 @@ class HybridUndulator(GenericElement):
     source_dimension_wf_h_slit_points=Setting(301)
     source_dimension_wf_v_slit_points=Setting(301)
     source_dimension_wf_distance = Setting(28.0)
+
+    waist_position_calculation = Setting(0)
+    waist_position = Setting(0.0)
+    which_waist = Setting(2)
+    number_of_waist_fit_points = Setting(10)
+    degree_of_waist_fit = Setting(3)
+    use_sigma_or_fwhm = Setting(0)
 
     horizontal_range_modification_factor_at_resizing       = Setting(0.5)
     horizontal_resolution_modification_factor_at_resizing  = Setting(5.0)
@@ -1273,7 +1280,7 @@ class HybridUndulator(GenericElement):
 
         return Bv, Bh
 
-    def createUndulator(self):
+    def createUndulator(self, no_shift=False):
         #***********Undulator
         if self.magnetic_field_from == 0:
             By, Bx = self.magnetic_field_from_K() #Peak Vertical field [T]
@@ -1296,16 +1303,27 @@ class HybridUndulator(GenericElement):
                                        _a=1)],
                           self.undulator_period, self.number_of_periods) #Planar Undulator
 
-        magFldCnt = SRWLMagFldC(_arMagFld=[und],
-                                _arXc = array('d', [self.horizontal_central_position]),
-                                _arYc = array('d', [self.vertical_central_position]),
-                                _arZc = array('d', [self.longitudinal_central_position]))#Container of all Field Elements
+        if no_shift:
+            magFldCnt = SRWLMagFldC(_arMagFld=[und],
+                                    _arXc = array('d', [0.0]),
+                                    _arYc = array('d', [0.0]),
+                                    _arZc = array('d', [0.0]))#Container of all Field Elements
+        else:
+            magFldCnt = SRWLMagFldC(_arMagFld=[und],
+                                    _arXc = array('d', [self.horizontal_central_position]),
+                                    _arYc = array('d', [self.vertical_central_position]),
+                                    _arZc = array('d', [self.longitudinal_central_position]))#Container of all Field Elements
 
         return magFldCnt
 
-    def createElectronBeam(self, distribution_type=Distribution.DIVERGENCE):
+    def createElectronBeam(self, distribution_type=Distribution.DIVERGENCE, position=0.0, use_nominal=False):
         #***********Electron Beam
         elecBeam = SRWLPartBeam()
+
+        electron_beam_size_h = self.electron_beam_size_h if use_nominal else \
+            numpy.sqrt(self.electron_beam_size_h**2 + (numpy.abs(self.longitudinal_central_position + position)*numpy.sin(self.electron_beam_divergence_h))**2)
+        electron_beam_size_v = self.electron_beam_size_v if use_nominal else \
+            numpy.sqrt(self.electron_beam_size_v**2 + (numpy.abs(self.longitudinal_central_position + position)*numpy.sin(self.electron_beam_divergence_v))**2)
 
         if self.type_of_initialization == 0: # zero
             self.moment_x = 0.0
@@ -1314,8 +1332,8 @@ class HybridUndulator(GenericElement):
             self.moment_xp = 0.0
             self.moment_yp = 0.0
         elif self.type_of_initialization == 2: # sampled
-            self.moment_x = numpy.random.normal(0.0, self.electron_beam_size_h)
-            self.moment_y = numpy.random.normal(0.0, self.electron_beam_size_v)
+            self.moment_x = numpy.random.normal(0.0, electron_beam_size_h)
+            self.moment_y = numpy.random.normal(0.0, electron_beam_size_v)
             self.moment_z = self.get_default_initial_z()
             self.moment_xp = numpy.random.normal(0.0, self.electron_beam_divergence_h)
             self.moment_yp = numpy.random.normal(0.0, self.electron_beam_divergence_v)
@@ -1330,10 +1348,10 @@ class HybridUndulator(GenericElement):
         elecBeam.Iavg = self.ring_current #Average Current [A]
 
         #2nd order statistical moments
-        elecBeam.arStatMom2[0] = 0 if distribution_type==Distribution.DIVERGENCE else (self.electron_beam_size_h)**2 #<(x-x0)^2>
+        elecBeam.arStatMom2[0] = 0 if distribution_type==Distribution.DIVERGENCE else (electron_beam_size_h)**2 #<(x-x0)^2>
         elecBeam.arStatMom2[1] = 0
         elecBeam.arStatMom2[2] = (self.electron_beam_divergence_h)**2 #<(x'-x'0)^2>
-        elecBeam.arStatMom2[3] = 0 if distribution_type==Distribution.DIVERGENCE else (self.electron_beam_size_v)**2 #<(y-y0)^2>
+        elecBeam.arStatMom2[3] = 0 if distribution_type==Distribution.DIVERGENCE else (electron_beam_size_v)**2 #<(y-y0)^2>
         elecBeam.arStatMom2[4] = 0
         elecBeam.arStatMom2[5] = (self.electron_beam_divergence_v)**2 #<(y'-y'0)^2>
         # energy spread
@@ -1380,6 +1398,103 @@ class HybridUndulator(GenericElement):
 
         return wfr
 
+    def calculate_automatic_waste_position(self, energy):
+        magFldCnt = self.createUndulator(no_shift=True)
+        arPrecParSpec = self.createCalculationPrecisionSettings()
+
+        undulator_half_length = 0.5 * self.number_of_periods * self.undulator_period
+
+        positions    = numpy.linspace(start=-undulator_half_length, stop=undulator_half_length, num=self.number_of_waist_fit_points)
+        sizes_e_x    = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_e_y    = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_ph_x   = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_ph_y   = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_tot_x  = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_tot_y  = numpy.zeros(self.number_of_waist_fit_points)
+
+        from matplotlib import pyplot as plt
+
+        for i in range(self.number_of_waist_fit_points):
+            position = positions[i]
+
+            elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION, position=position, use_nominal=False)
+            elecBeam_Ph = self.createElectronBeam(distribution_type=Distribution.POSITION, use_nominal=True)
+            wfr         = self.createInitialWavefrontMesh(elecBeam_Ph, energy)
+            optBLSouDim = self.createBeamlineSourceDimension(back_position=(self.source_dimension_wf_distance + self.longitudinal_central_position - position), automatic=True)
+
+            srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
+            srwl.PropagElecField(wfr, optBLSouDim)
+
+            arI = array('f', [0] * wfr.mesh.nx * wfr.mesh.ny)  # "flat" 2D array to take intensity data
+            srwl.CalcIntFromElecField(arI, wfr, 6, 0, 3, wfr.mesh.eStart, 0, 0) # SINGLE ELECTRON!
+
+            x, y, intensity_distribution = self.transform_srw_array(arI, wfr.mesh)
+
+            print(len(x), len(y), intensity_distribution.shape)
+
+            def plot_size(num, coord, histo, position):
+                plt.figure(num)
+                plt.title("Histo, pos" + str(position))
+                plt.plot(coord, histo)
+                plt.xlabel("Position relative to ID center [mm]")
+                plt.ylabel("intensity")
+
+            def get_size(coord, intensity_distribution, projection_axis, ebeam_index, plot=False):
+                sigma_e  = numpy.sqrt(elecBeam.arStatMom2[ebeam_index])
+                histo    = numpy.sum(intensity_distribution, axis=projection_axis)
+                sigma    = get_sigma(histo, coord) if self.use_sigma_or_fwhm==0 else get_fwhm(histo, coord)[0]/2.355
+
+                if numpy.isnan(sigma): sigma = 0.0
+
+                if plot: plot_size(i, coord, histo, position)
+
+                return sigma_e, sigma, numpy.sqrt(sigma**2 + sigma_e**2)
+
+            sizes_e_x[i], sizes_ph_x[i], sizes_tot_x[i] = get_size(x, intensity_distribution, 1, 0)
+            sizes_e_y[i], sizes_ph_y[i], sizes_tot_y[i] = get_size(y, intensity_distribution, 0, 3)
+
+        def plot(direction, num, positions, sizes_e, sizes_ph, sizes_tot, waist_position, waist_size):
+            plt.figure(num)
+            plt.title(direction + " Direction")
+            plt.plot(positions*1e3, sizes_e*1e6,   label='electron')
+            plt.plot(positions*1e3, sizes_ph*1e6,  label='photon')
+            plt.plot(positions*1e3, sizes_tot*1e6, label='total')
+            plt.plot([waist_position*1e3], [waist_size*1e6], 'bo', label="waist")
+            plt.xlabel("Position relative to ID center [mm]")
+            plt.ylabel("Sigma [um]")
+            plt.legend()
+
+        def get_minimum(positions, sizes):
+            coeffiecients = numpy.polyfit(positions, sizes, deg=self.degree_of_waist_fit)
+            p = numpy.poly1d(coeffiecients)
+            bounds = [positions[0], positions[-1]]
+
+            critical_points = numpy.array(bounds + [x for x in p.deriv().r if x.imag == 0 and bounds[0] < x.real < bounds[1]])
+            critical_sizes = p(critical_points)
+
+            minimum_value = numpy.inf
+            minimum_position = numpy.nan
+
+            for i in range(len(critical_points)):
+                if critical_sizes[i] <= minimum_value:
+                    minimum_value = critical_sizes[i]
+                    minimum_position = critical_points[i]
+
+            return minimum_position, minimum_value
+
+        waist_position_x, waist_size_x = get_minimum(positions, sizes_tot_x)
+        waist_position_y, waist_size_y = get_minimum(positions, sizes_tot_y)
+
+        plot("Horizontal", 0, positions, sizes_e_x, sizes_ph_x, sizes_tot_x, waist_position_x, waist_size_x)
+        plot("Vertical",   1, positions, sizes_e_y, sizes_ph_y, sizes_tot_y, waist_position_y, waist_size_y)
+
+        plt.show()
+
+        print("Horizontal source size: ", waist_size_x*1e6, "um at ", (self.longitudinal_central_position + waist_position_x)*1e3 , "(", waist_position_x*1e3,  ") mm from the straight section (ID) center")
+        print("Vertical   source size: ", waist_size_y*1e6, "um at ", (self.longitudinal_central_position + waist_position_y)*1e3 , "(", waist_position_y*1e3,  ") mm from the straight section (ID) center")
+
+        return waist_position_x, waist_position_y
+
     def createCalculationPrecisionSettings(self):
         #***********Precision Parameters for SR calculation
         meth = 1 #SR calculation method: 0- "manual", 1- "auto-undulator", 2- "auto-wiggler"
@@ -1388,20 +1503,24 @@ class HybridUndulator(GenericElement):
         zEndInteg = 0 #longitudinal position to finish integration (effective if > zStartInteg)
         npTraj = 100000 #Number of points for trajectory calculation
         useTermin = 1 #Use "terminating terms" (i.e. asymptotic expansions at zStartInteg and zEndInteg) or not (1 or 0 respectively)
-        arPrecParSpec = [meth, relPrec, zStartInteg, zEndInteg, npTraj, useTermin, 0]
+        # This is the convergence parameter. Higher is more accurate but slower!!
+        sampFactNxNyForProp = 0.0 #0.6 #sampling factor for adjusting nx, ny (effective if > 0)
 
-        return arPrecParSpec
+        return [meth, relPrec, zStartInteg, zEndInteg, npTraj, useTermin, sampFactNxNyForProp]
 
-    def createBeamlineSourceDimension(self, wfr):
+    def createBeamlineSourceDimension(self, back_position=0.0, automatic=False):
         #***************** Optical Elements and Propagation Parameters
 
-        opDrift = SRWLOptD(-self.source_dimension_wf_distance) # back to the center of the undulator
-        ppDrift = [0, 0, 1., 1, 0,
-                   self.horizontal_range_modification_factor_at_resizing,
-                   self.horizontal_resolution_modification_factor_at_resizing,
-                   self.vertical_range_modification_factor_at_resizing,
-                   self.vertical_resolution_modification_factor_at_resizing,
-                   0, 0, 0]
+        opDrift = SRWLOptD(-back_position) # back to waist position
+        if not automatic:
+            ppDrift = [0, 0, 1., 1, 0,
+                       self.horizontal_range_modification_factor_at_resizing,
+                       self.horizontal_resolution_modification_factor_at_resizing,
+                       self.vertical_range_modification_factor_at_resizing,
+                       self.vertical_resolution_modification_factor_at_resizing,
+                       0, 0, 0]
+        else:
+            ppDrift = [0, 0, 1., 2, 0, 1, 1.0, 10.0, 1.0, 10.0, 0, 0, 0]
 
         return SRWLOptC([opDrift],[ppDrift])
 
@@ -1430,6 +1549,8 @@ class HybridUndulator(GenericElement):
             for iy in range(mesh.ny):
                 intensity_array[ix, iy] = output_array[iy, ix]
 
+        intensity_array[numpy.where(numpy.isnan(intensity_array))]=0.0
+
         return h_array, v_array, intensity_array
 
 
@@ -1437,19 +1558,34 @@ class HybridUndulator(GenericElement):
 
         self.checkSRWFields()
 
+        if self.longitudinal_central_position != 0.0:
+            if self.waist_position_calculation == 0:  # None
+                self.waist_position = 0.0
+            elif self.waist_position_calculation == 1:  # Automatic
+                if self.compute_power: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed while running a thermal load loop")
+
+                waist_position_h, waist_position_v = self.calculate_automatic_waste_position(energy)
+
+                if self.which_waist == 0: # horizontal
+                    self.waist_position = waist_position_h
+                elif self.which_waist == 1: # vertical
+                    self.waist_position = waist_position_v
+                else: # middle point
+                    self.waist_position = 0.5*(waist_position_h + waist_position_v)
+
+            elif self.waist_position_calculation == 2:  # User Defined
+                congruence.checkNumber(self.waist_position)
+                congruence.checkLessOrEqualThan(self.waist_position, self.source_dimension_wf_distance, "Waist Position", "Propagation Distance")
+        else:
+            self.waist_position = 0.0
+
         magFldCnt = self.createUndulator()
-        elecBeam = self.createElectronBeam(distribution_type=Distribution.DIVERGENCE)
-        wfr = self.createInitialWavefrontMesh(elecBeam, energy)
+        elecBeam  = self.createElectronBeam(distribution_type=Distribution.DIVERGENCE, position=self.waist_position)
+        wfr       = self.createInitialWavefrontMesh(elecBeam, energy)
 
         arPrecParSpec = self.createCalculationPrecisionSettings()
 
-        # This is the convergence parameter. Higher is more accurate but slower!!
-        # 0.2 is used in the original example. But I think it should be higher. The calculation may then however need too much memory.
-        sampFactNxNyForProp = 0.0 #0.6 #sampling factor for adjusting nx, ny (effective if > 0)
-
         # 1 calculate intensity distribution ME convoluted for dimension size
-
-        arPrecParSpec[6] = sampFactNxNyForProp #sampling factor for adjusting nx, ny (effective if > 0)
         srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
 
         arI = array('f', [0]*wfr.mesh.nx*wfr.mesh.ny) #"flat" 2D array to take intensity data
@@ -1486,7 +1622,7 @@ class HybridUndulator(GenericElement):
                 self.cumulated_power_density  += current_power_density
                 self.cumulated_power           = numpy.append(self.cumulated_power,  numpy.ones(1) * (self.cumulated_power[-1] + current_power))
 
-        distance = self.source_dimension_wf_distance # relative to the center of the undulator
+        distance = self.source_dimension_wf_distance - self.waist_position # relative to the center of the undulator
 
         x_first = numpy.arctan(x/distance)
         z_first = numpy.arctan(z/distance)
@@ -1499,10 +1635,10 @@ class HybridUndulator(GenericElement):
 
         if self.save_srw_result == 1: srwl_uti_save_intens_ascii(arI, wfrAngDist.mesh, self.angular_distribution_srw_file)
 
-        # for source dimension, back propagation to the source central position
-        elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION)
+        # for source dimension, back propagation to the source position
+        elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION, position=self.waist_position)
         wfr         = self.createInitialWavefrontMesh(elecBeam, energy)
-        optBLSouDim = self.createBeamlineSourceDimension(wfr)
+        optBLSouDim = self.createBeamlineSourceDimension(back_position=(self.source_dimension_wf_distance - self.waist_position))
 
         srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
         srwl.PropagElecField(wfr, optBLSouDim)
