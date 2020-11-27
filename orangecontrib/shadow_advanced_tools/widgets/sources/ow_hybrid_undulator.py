@@ -86,6 +86,9 @@ m2ev = codata.c * codata.h / codata.e
 from oasys_srw.srwlib import *
 from oasys_srw.srwlib import array as srw_array
 
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
 VERTICAL = 1
 HORIZONTAL = 2
 BOTH = 3
@@ -166,17 +169,28 @@ class HybridUndulator(GenericElement):
     source_dimension_wf_v_slit_points=Setting(301)
     source_dimension_wf_distance = Setting(28.0)
 
+    horizontal_range_modification_factor_at_resizing       = Setting(0.5)
+    horizontal_resolution_modification_factor_at_resizing  = Setting(5.0)
+    vertical_range_modification_factor_at_resizing         = Setting(0.5)
+    vertical_resolution_modification_factor_at_resizing    = Setting(5.0)
+
     waist_position_calculation = Setting(0)
     waist_position = Setting(0.0)
+
+    waist_position_auto = Setting(0)
+    waist_position_auto_h = Setting(0.0)
+    waist_position_auto_v = Setting(0.0)
+    waist_back_propagation_parameters = Setting(1)
+    waist_horizontal_range_modification_factor_at_resizing       = Setting(0.5)
+    waist_horizontal_resolution_modification_factor_at_resizing  = Setting(5.0)
+    waist_vertical_range_modification_factor_at_resizing         = Setting(0.5)
+    waist_vertical_resolution_modification_factor_at_resizing    = Setting(5.0)
     which_waist = Setting(2)
     number_of_waist_fit_points = Setting(10)
     degree_of_waist_fit = Setting(3)
     use_sigma_or_fwhm = Setting(0)
 
-    horizontal_range_modification_factor_at_resizing       = Setting(0.5)
-    horizontal_resolution_modification_factor_at_resizing  = Setting(5.0)
-    vertical_range_modification_factor_at_resizing         = Setting(0.5)
-    vertical_resolution_modification_factor_at_resizing    = Setting(5.0)
+    waist_position_user_defined = Setting(0.0)
 
     kind_of_sampler = Setting(1)
     save_srw_result = Setting(0)
@@ -287,8 +301,6 @@ class HybridUndulator(GenericElement):
         self.srw_box = oasysgui.widgetBox(tab_spdiv, "", addSpace=False, orientation="vertical", height=550)
         self.srw_files_box = oasysgui.widgetBox(tab_spdiv, "", addSpace=False, orientation="vertical", height=550)
         self.ascii_box = oasysgui.widgetBox(tab_spdiv, "", addSpace=False, orientation="vertical", height=550)
-
-        self.set_DistributionSource()
 
         ####################################################################################
         # SHADOW
@@ -406,29 +418,29 @@ class HybridUndulator(GenericElement):
         tab_id   = oasysgui.createTabPage(tab_und, "ID Parameters")
         tab_traj = oasysgui.createTabPage(tab_und, "Trajectory")
 
-        oasysgui.lineEdit(tab_id, self, "undulator_period", "Period Length [m]", labelWidth=260, valueType=float, orientation="horizontal", callback=self.set_harmonic_energy)
-        oasysgui.lineEdit(tab_id, self, "number_of_periods", "Number of Periods", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(tab_id, self, "horizontal_central_position", "Horizontal Central Position [m]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(tab_id, self, "vertical_central_position", "Vertical Central Position [m]", labelWidth=260, valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(tab_id, self, "longitudinal_central_position", "Longitudinal Central Position [m]", labelWidth=260, valueType=float, orientation="horizontal", callback=self.show_warning)
+        self.tab_pos = oasysgui.tabWidget(tab_id)
 
-        self.warning_label = oasysgui.widgetLabel(tab_id, "  Warning: The source will be positioned at the center\n" +
+        tab_dim   = oasysgui.createTabPage(self.tab_pos, "ID")
+
+        oasysgui.lineEdit(tab_dim, self, "undulator_period", "Period Length [m]", labelWidth=260, valueType=float, orientation="horizontal", callback=self.set_harmonic_energy)
+        oasysgui.lineEdit(tab_dim, self, "number_of_periods", "Number of Periods", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(tab_dim, self, "horizontal_central_position", "Horizontal Central Position [m]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(tab_dim, self, "vertical_central_position", "Vertical Central Position [m]", labelWidth=260, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(tab_dim, self, "longitudinal_central_position", "Longitudinal Central Position [m]", labelWidth=260, valueType=float, orientation="horizontal", callback=self.manageWaistPosition)
+
+        self.warning_label = oasysgui.widgetLabel(tab_dim, "  Warning: The source will be positioned at the center\n" +
                                                   "  of the ID: the relative distance of the first optical\n" +
                                                   "  element has to be longitudinally shifted accordingly")
         self.warning_label.setStyleSheet("color: red; font: bold")
 
-        self.show_warning()
-
-        gui.separator(tab_id, height=10)
-
-        gui.comboBox(tab_id, self, "magnetic_field_from", label="Magnetic Field", labelWidth=350,
+        gui.comboBox(tab_dim, self, "magnetic_field_from", label="Magnetic Field", labelWidth=350,
                      items=["From K", "From B"],
                      callback=self.set_MagneticField,
                      sendSelectedValue=False, orientation="horizontal")
 
-        container = oasysgui.widgetBox(tab_id, "", addSpace=False, orientation="horizontal")
+        container = oasysgui.widgetBox(tab_dim, "", addSpace=False, orientation="horizontal")
 
-        horizontal_box = oasysgui.widgetBox(container, "", addSpace=False, orientation="vertical", width=205)
+        horizontal_box = oasysgui.widgetBox(container, "", addSpace=False, orientation="vertical", width=195)
         vertical_box = oasysgui.widgetBox(container,  "", addSpace=False, orientation="vertical", width=155)
 
         gui.label(horizontal_box, self, "                     Horizontal")
@@ -589,7 +601,7 @@ class HybridUndulator(GenericElement):
 
         gui.rubber(self.controlArea)
 
-        cumulated_plot_tab = oasysgui.createTabPage(self.main_tabs, "Cumulated_Plots")
+        cumulated_plot_tab = oasysgui.createTabPage(self.main_tabs, "Cumulated Plots")
 
         view_box = oasysgui.widgetBox(cumulated_plot_tab, "Plotting Style", addSpace=False, orientation="horizontal")
         view_box_1 = oasysgui.widgetBox(view_box, "", addSpace=False, orientation="vertical", width=350)
@@ -604,7 +616,12 @@ class HybridUndulator(GenericElement):
 
         self.initializeCumulatedTabs()
 
+        self.set_DistributionSource()
+
         gui.rubber(self.mainArea)
+
+    def is_canted_undulator(self):
+        return self.longitudinal_central_position != 0.0
 
     def initializeCumulatedTabs(self):
         current_tab = self.cumulated_tabs.currentIndex()
@@ -624,6 +641,99 @@ class HybridUndulator(GenericElement):
             tab.setFixedWidth(self.IMAGE_WIDTH)
 
         self.cumulated_tabs.setCurrentIndex(current_tab)
+
+    def manageWaistPosition(self):
+        is_canted = self.is_canted_undulator()
+
+        self.warning_label.setVisible(is_canted)
+        self.initializeWaistPositionTab(show=is_canted)
+
+    def initializeWaistPositionTab(self, show=True):
+        if show and self.tab_pos.count() == 1:
+            tab_waist   = oasysgui.createTabPage(self.tab_pos, "Waist Position")
+
+            gui.comboBox(tab_waist, self, "waist_position_calculation", label="Waist Position Calculation", labelWidth=310,
+                         items=["None", "Automatic", "User Defined"], orientation="horizontal", callback=self.set_WaistPositionCalculation)
+
+            self.box_none     = oasysgui.widgetBox(tab_waist, "", addSpace=False, orientation="vertical", height=350)
+            self.box_auto     = oasysgui.widgetBox(tab_waist, "", addSpace=False, orientation="vertical", height=350)
+
+            gui.comboBox(self.box_auto, self, "waist_back_propagation_parameters", label="Propagation Parameters", labelWidth=250,
+                         items=["Same as Source", "Different"], orientation="horizontal", callback=self.set_WaistBackPropagationParameters)
+
+            self.waist_param_box_1 = oasysgui.widgetBox(self.box_auto, "", addSpace=False, orientation="vertical", height=110)
+            self.waist_param_box_2 = oasysgui.widgetBox(self.box_auto, "", addSpace=False, orientation="vertical", height=110)
+
+            gui.separator(self.box_auto, height=5)
+
+            oasysgui.lineEdit(self.waist_param_box_2, self, "waist_horizontal_range_modification_factor_at_resizing", "H range modification factor at resizing", labelWidth=290, valueType=float, orientation="horizontal")
+            oasysgui.lineEdit(self.waist_param_box_2, self, "waist_horizontal_resolution_modification_factor_at_resizing", "H resolution modification factor at resizing", labelWidth=290, valueType=float, orientation="horizontal")
+            oasysgui.lineEdit(self.waist_param_box_2, self, "waist_vertical_range_modification_factor_at_resizing", "V range modification factor at resizing", labelWidth=290, valueType=float, orientation="horizontal")
+            oasysgui.lineEdit(self.waist_param_box_2, self, "waist_vertical_resolution_modification_factor_at_resizing", "V resolution modification factor at resizing", labelWidth=290, valueType=float, orientation="horizontal")
+
+            oasysgui.lineEdit(self.box_auto, self, "number_of_waist_fit_points", "Number of Fit Points", labelWidth=290, valueType=int, orientation="horizontal")
+            oasysgui.lineEdit(self.box_auto, self, "degree_of_waist_fit", "Degree of Polynomial Fit", labelWidth=290, valueType=int, orientation="horizontal")
+
+            gui.comboBox(self.box_auto, self, "use_sigma_or_fwhm", label="Gaussian size from", labelWidth=250,
+                         items=["Sigma", "FWHM"], orientation="horizontal")
+
+            gui.comboBox(self.box_auto, self, "which_waist", label="Use Direction", labelWidth=150,
+                         items=["Horizontal", "Vertical", "Both (middle point)"], orientation="horizontal",
+                         callback=self.set_which_waist)
+
+            self.set_WaistBackPropagationParameters()
+
+            le = oasysgui.lineEdit(self.box_auto, self, "waist_position_auto", "Waist Position (relative to ID center) [m]", labelWidth=265, valueType=float, orientation="horizontal")
+            le.setReadOnly(True)
+            font = QFont(le.font())
+            font.setBold(True)
+            le.setFont(font)
+            palette = QPalette(le.palette())
+            palette.setColor(QPalette.Text, QColor('dark blue'))
+            palette.setColor(QPalette.Base, QColor(243, 240, 160))
+            le.setPalette(palette)
+
+            self.box_user_def = oasysgui.widgetBox(tab_waist, "", addSpace=False, orientation="vertical", height=250)
+
+            oasysgui.lineEdit(self.box_user_def, self, "waist_position_user_defined", "Waist Position (relative to ID center) [m]", labelWidth=265, valueType=float, orientation="horizontal")
+
+            self.set_WaistPositionCalculation()
+
+        elif not show and self.tab_pos.count() == 2:
+            self.tab_pos.removeTab(1)
+
+    def initializeWaistPositionPlotTab(self, show=True):
+        if show and self.main_tabs.count() == 3:
+            waist_tab = oasysgui.createTabPage(self.main_tabs, "Waist Position for Canted Undulator")
+
+            figure = Figure(figsize=(700, 500))
+
+            self.waist_axes = figure.subplots(1, 2)
+            self.waist_axes[0].set_title("Horizontal Direction", fontdict={'horizontalalignment': 'right'})
+            self.waist_axes[1].set_title("Vertical Direction", fontdict={'horizontalalignment': 'right'})
+            self.waist_axes[0].set_xlabel("Position relative to ID center [mm]")
+            self.waist_axes[0].set_ylabel("Sigma [um]")
+            self.waist_axes[1].set_xlabel("Position relative to ID center [mm]")
+            self.waist_axes[1].set_ylabel("Sigma [um]")
+
+            self.waist_figure = FigureCanvas(figure)
+
+            waist_tab.layout().addWidget(self.waist_figure)
+
+        elif not show and self.main_tabs.count() == 4:
+            self.main_tabs.removeTab(3)
+            self.waist_axes = None
+
+    def set_WaistPositionCalculation(self):
+        self.box_none.setVisible(self.waist_position_calculation==0)
+        self.box_auto.setVisible(self.waist_position_calculation==1)
+        self.box_user_def.setVisible(self.waist_position_calculation==2)
+
+        self.initializeWaistPositionPlotTab(show=(self.waist_position_calculation==1))
+
+    def set_WaistBackPropagationParameters(self):
+        self.waist_param_box_1.setVisible(self.waist_back_propagation_parameters==0)
+        self.waist_param_box_2.setVisible(self.waist_back_propagation_parameters==1)
 
     def set_CumulatedPlotQuality(self):
         if not self.cumulated_power is None:
@@ -662,6 +772,7 @@ class HybridUndulator(GenericElement):
         super(HybridUndulator, self).onReceivingInput()
 
         self.initializeCumulatedTabs()
+        self.manageWaistPosition()
 
     ####################################################################################
     # GRAPHICS
@@ -669,9 +780,6 @@ class HybridUndulator(GenericElement):
 
     def after_change_workspace_units(self):
         pass
-
-    def show_warning(self):
-        self.warning_label.setVisible(self.longitudinal_central_position != 0.0)
 
     def set_TypeOfInitialization(self):
         self.left_box_3_1.setVisible(self.type_of_initialization==1)
@@ -784,6 +892,12 @@ class HybridUndulator(GenericElement):
         self.ascii_box.setVisible(self.distribution_source == 2)
 
         self.set_harmonic_energy()
+
+        if self.distribution_source == 0:
+            self.manageWaistPosition()
+            self.set_WaistPositionCalculation()
+        else:
+            self.initializeWaistPositionPlotTab(show=False)
 
     def set_Polarization(self):
         self.ewp_box_8.setVisible(self.polarization==1)
@@ -1307,7 +1421,7 @@ class HybridUndulator(GenericElement):
             magFldCnt = SRWLMagFldC(_arMagFld=[und],
                                     _arXc = array('d', [0.0]),
                                     _arYc = array('d', [0.0]),
-                                    _arZc = array('d', [0.0]))#Container of all Field Elements
+                                    _arZc = array('d', [0.0])) #Container of all Field Elements
         else:
             magFldCnt = SRWLMagFldC(_arMagFld=[und],
                                     _arXc = array('d', [self.horizontal_central_position]),
@@ -1412,15 +1526,14 @@ class HybridUndulator(GenericElement):
         sizes_tot_x  = numpy.zeros(self.number_of_waist_fit_points)
         sizes_tot_y  = numpy.zeros(self.number_of_waist_fit_points)
 
-        from matplotlib import pyplot as plt
-
         for i in range(self.number_of_waist_fit_points):
             position = positions[i]
 
             elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION, position=position, use_nominal=False)
             elecBeam_Ph = self.createElectronBeam(distribution_type=Distribution.POSITION, use_nominal=True)
             wfr         = self.createInitialWavefrontMesh(elecBeam_Ph, energy)
-            optBLSouDim = self.createBeamlineSourceDimension(back_position=(self.source_dimension_wf_distance + self.longitudinal_central_position - position), automatic=True)
+            optBLSouDim = self.createBeamlineSourceDimension(back_position=(self.source_dimension_wf_distance + self.longitudinal_central_position - position),
+                                                             waist_calculation=self.waist_back_propagation_parameters==1)
 
             srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
             srwl.PropagElecField(wfr, optBLSouDim)
@@ -1430,39 +1543,31 @@ class HybridUndulator(GenericElement):
 
             x, y, intensity_distribution = self.transform_srw_array(arI, wfr.mesh)
 
-            print(len(x), len(y), intensity_distribution.shape)
-
-            def plot_size(num, coord, histo, position):
-                plt.figure(num)
-                plt.title("Histo, pos" + str(position))
-                plt.plot(coord, histo)
-                plt.xlabel("Position relative to ID center [mm]")
-                plt.ylabel("intensity")
-
-            def get_size(coord, intensity_distribution, projection_axis, ebeam_index, plot=False):
+            def get_size(coord, intensity_distribution, projection_axis, ebeam_index):
                 sigma_e  = numpy.sqrt(elecBeam.arStatMom2[ebeam_index])
                 histo    = numpy.sum(intensity_distribution, axis=projection_axis)
                 sigma    = get_sigma(histo, coord) if self.use_sigma_or_fwhm==0 else get_fwhm(histo, coord)[0]/2.355
 
                 if numpy.isnan(sigma): sigma = 0.0
 
-                if plot: plot_size(i, coord, histo, position)
-
                 return sigma_e, sigma, numpy.sqrt(sigma**2 + sigma_e**2)
 
             sizes_e_x[i], sizes_ph_x[i], sizes_tot_x[i] = get_size(x, intensity_distribution, 1, 0)
             sizes_e_y[i], sizes_ph_y[i], sizes_tot_y[i] = get_size(y, intensity_distribution, 0, 3)
 
-        def plot(direction, num, positions, sizes_e, sizes_ph, sizes_tot, waist_position, waist_size):
-            plt.figure(num)
-            plt.title(direction + " Direction")
-            plt.plot(positions*1e3, sizes_e*1e6,   label='electron')
-            plt.plot(positions*1e3, sizes_ph*1e6,  label='photon')
-            plt.plot(positions*1e3, sizes_tot*1e6, label='total')
-            plt.plot([waist_position*1e3], [waist_size*1e6], 'bo', label="waist")
-            plt.xlabel("Position relative to ID center [mm]")
-            plt.ylabel("Sigma [um]")
-            plt.legend()
+        def plot(direction, positions, sizes_e, sizes_ph, sizes_tot, waist_position, waist_size):
+            self.waist_axes[direction].clear()
+            self.waist_axes[direction].set_title(("Horizontal" if direction == 0 else "Vertical") + " Direction\n" +
+                                                 "Source size: " + str(round(waist_size * 1e6, 2)) + " " + r'$\mu$' + "m \n" +
+                                                 "at " + str(round(waist_position * 1e3, 1)) + " mm from the ID center")
+
+            self.waist_axes[direction].plot(positions*1e3, sizes_e*1e6,   label='electron')
+            self.waist_axes[direction].plot(positions*1e3, sizes_ph*1e6,  label='photon')
+            self.waist_axes[direction].plot(positions*1e3, sizes_tot*1e6, label='total')
+            self.waist_axes[direction].plot([waist_position*1e3], [waist_size*1e6], 'bo', label="waist")
+            self.waist_axes[direction].set_xlabel("Position relative to ID center [mm]")
+            self.waist_axes[direction].set_ylabel("Sigma [um]")
+            self.waist_axes[direction].legend()
 
         def get_minimum(positions, sizes):
             coeffiecients = numpy.polyfit(positions, sizes, deg=self.degree_of_waist_fit)
@@ -1485,13 +1590,14 @@ class HybridUndulator(GenericElement):
         waist_position_x, waist_size_x = get_minimum(positions, sizes_tot_x)
         waist_position_y, waist_size_y = get_minimum(positions, sizes_tot_y)
 
-        plot("Horizontal", 0, positions, sizes_e_x, sizes_ph_x, sizes_tot_x, waist_position_x, waist_size_x)
-        plot("Vertical",   1, positions, sizes_e_y, sizes_ph_y, sizes_tot_y, waist_position_y, waist_size_y)
+        plot(0, positions, sizes_e_x, sizes_ph_x, sizes_tot_x, waist_position_x, waist_size_x)
+        plot(1, positions, sizes_e_y, sizes_ph_y, sizes_tot_y, waist_position_y, waist_size_y)
 
-        plt.show()
-
-        print("Horizontal source size: ", waist_size_x*1e6, "um at ", (self.longitudinal_central_position + waist_position_x)*1e3 , "(", waist_position_x*1e3,  ") mm from the straight section (ID) center")
-        print("Vertical   source size: ", waist_size_y*1e6, "um at ", (self.longitudinal_central_position + waist_position_y)*1e3 , "(", waist_position_y*1e3,  ") mm from the straight section (ID) center")
+        try:
+            self.waist_figure.draw()
+        except ValueError as e:
+            if "Image size of " in str(e): pass
+            else: raise e
 
         return waist_position_x, waist_position_y
 
@@ -1508,11 +1614,11 @@ class HybridUndulator(GenericElement):
 
         return [meth, relPrec, zStartInteg, zEndInteg, npTraj, useTermin, sampFactNxNyForProp]
 
-    def createBeamlineSourceDimension(self, back_position=0.0, automatic=False):
+    def createBeamlineSourceDimension(self, back_position=0.0, waist_calculation=False):
         #***************** Optical Elements and Propagation Parameters
 
         opDrift = SRWLOptD(-back_position) # back to waist position
-        if not automatic:
+        if not waist_calculation:
             ppDrift = [0, 0, 1., 1, 0,
                        self.horizontal_range_modification_factor_at_resizing,
                        self.horizontal_resolution_modification_factor_at_resizing,
@@ -1520,7 +1626,12 @@ class HybridUndulator(GenericElement):
                        self.vertical_resolution_modification_factor_at_resizing,
                        0, 0, 0]
         else:
-            ppDrift = [0, 0, 1., 2, 0, 1, 1.0, 10.0, 1.0, 10.0, 0, 0, 0]
+            ppDrift = [0, 0, 1., 1, 0,
+                       self.waist_horizontal_range_modification_factor_at_resizing,
+                       self.waist_horizontal_resolution_modification_factor_at_resizing,
+                       self.waist_vertical_range_modification_factor_at_resizing,
+                       self.waist_vertical_resolution_modification_factor_at_resizing,
+                       0, 0, 0]
 
         return SRWLOptC([opDrift],[ppDrift])
 
@@ -1553,31 +1664,43 @@ class HybridUndulator(GenericElement):
 
         return h_array, v_array, intensity_array
 
+    def calculate_waist_position(self, energy):
+        if self.distribution_source == 0: # SRW calculation
+            if self.is_canted_undulator():
+                if self.waist_position_calculation == 0:  # None
+                    self.waist_position = 0.0
+                elif self.waist_position_calculation == 1:  # Automatic
+                    if self.compute_power: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed while running a thermal load loop")
+
+                    self.waist_position_auto_h, self.waist_position_auto_v = self.calculate_automatic_waste_position(energy)
+
+                    self.set_which_waist()
+
+                    self.waist_position = self.waist_position_auto
+
+                elif self.waist_position_calculation == 2:  # User Defined
+                    congruence.checkNumber(self.waist_position_user_defined)
+                    congruence.checkLessOrEqualThan(self.waist_position_user_defined, self.source_dimension_wf_distance, "Waist Position", "Propagation Distance")
+
+                    self.waist_position = self.waist_position_user_defined
+            else:
+                self.waist_position = 0.0
+        else:
+            self.waist_position = 0.0
+
+    def set_which_waist(self):
+        if self.which_waist == 0:  # horizontal
+            self.waist_position_auto = round(self.waist_position_auto_h, 4)
+        elif self.which_waist == 1:  # vertical
+            self.waist_position_auto = round(self.waist_position_auto_v, 4)
+        else:  # middle point
+            self.waist_position_auto = round(0.5 * (self.waist_position_auto_h + self.waist_position_auto_v), 4)
 
     def runSRWCalculation(self, energy, do_cumulated_calculations=False):
 
         self.checkSRWFields()
 
-        if self.longitudinal_central_position != 0.0:
-            if self.waist_position_calculation == 0:  # None
-                self.waist_position = 0.0
-            elif self.waist_position_calculation == 1:  # Automatic
-                if self.compute_power: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed while running a thermal load loop")
-
-                waist_position_h, waist_position_v = self.calculate_automatic_waste_position(energy)
-
-                if self.which_waist == 0: # horizontal
-                    self.waist_position = waist_position_h
-                elif self.which_waist == 1: # vertical
-                    self.waist_position = waist_position_v
-                else: # middle point
-                    self.waist_position = 0.5*(waist_position_h + waist_position_v)
-
-            elif self.waist_position_calculation == 2:  # User Defined
-                congruence.checkNumber(self.waist_position)
-                congruence.checkLessOrEqualThan(self.waist_position, self.source_dimension_wf_distance, "Waist Position", "Propagation Distance")
-        else:
-            self.waist_position = 0.0
+        self.calculate_waist_position(energy)
 
         magFldCnt = self.createUndulator()
         elecBeam  = self.createElectronBeam(distribution_type=Distribution.DIVERGENCE, position=self.waist_position)
