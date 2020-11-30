@@ -1688,7 +1688,7 @@ class HybridUndulator(GenericElement):
                     self.waist_position = self.waist_position_auto
 
                 elif self.waist_position_calculation == 2:  # User Defined
-                    congruence.checkNumber(self.waist_position_user_defined)
+                    congruence.checkNumber(self.waist_position_user_defined, "User Defined Waist Position")
                     congruence.checkLessOrEqualThan(self.waist_position_user_defined, self.source_dimension_wf_distance, "Waist Position", "Propagation Distance")
 
                     self.waist_position = self.waist_position_user_defined
