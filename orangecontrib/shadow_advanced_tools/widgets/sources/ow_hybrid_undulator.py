@@ -647,6 +647,7 @@ class HybridUndulator(GenericElement):
 
         self.warning_label.setVisible(is_canted)
         self.initializeWaistPositionTab(show=is_canted)
+        self.initializeWaistPositionPlotTab(show=(is_canted and self.waist_position_calculation==1))
 
     def initializeWaistPositionTab(self, show=True):
         if show and self.tab_pos.count() == 1:
@@ -895,7 +896,6 @@ class HybridUndulator(GenericElement):
 
         if self.distribution_source == 0:
             self.manageWaistPosition()
-            self.set_WaistPositionCalculation()
         else:
             self.initializeWaistPositionPlotTab(show=False)
 
@@ -1435,9 +1435,9 @@ class HybridUndulator(GenericElement):
         elecBeam = SRWLPartBeam()
 
         electron_beam_size_h = self.electron_beam_size_h if use_nominal else \
-            numpy.sqrt(self.electron_beam_size_h**2 + (numpy.abs(self.longitudinal_central_position + position)*numpy.sin(self.electron_beam_divergence_h))**2)
+            numpy.sqrt(self.electron_beam_size_h ** 2 + (numpy.abs(self.longitudinal_central_position + position) * numpy.tan(self.electron_beam_divergence_h)) ** 2)
         electron_beam_size_v = self.electron_beam_size_v if use_nominal else \
-            numpy.sqrt(self.electron_beam_size_v**2 + (numpy.abs(self.longitudinal_central_position + position)*numpy.sin(self.electron_beam_divergence_v))**2)
+            numpy.sqrt(self.electron_beam_size_v ** 2 + (numpy.abs(self.longitudinal_central_position + position) * numpy.tan(self.electron_beam_divergence_v)) ** 2)
 
         if self.type_of_initialization == 0: # zero
             self.moment_x = 0.0
@@ -1516,15 +1516,22 @@ class HybridUndulator(GenericElement):
         magFldCnt = self.createUndulator(no_shift=True)
         arPrecParSpec = self.createCalculationPrecisionSettings()
 
-        undulator_half_length = 0.5 * self.number_of_periods * self.undulator_period
+        undulator_length = self.number_of_periods * self.undulator_period
+        wavelength       = (codata.h * codata.c / codata.e)/energy
 
-        positions    = numpy.linspace(start=-undulator_half_length, stop=undulator_half_length, num=self.number_of_waist_fit_points)
-        sizes_e_x    = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_e_y    = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_ph_x   = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_ph_y   = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_tot_x  = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_tot_y  = numpy.zeros(self.number_of_waist_fit_points)
+        gauss_sigma_ph  = numpy.sqrt(2*wavelength*undulator_length)/(2*numpy.pi)
+        gauss_sigmap_ph = numpy.sqrt(wavelength/(2*undulator_length))
+
+        positions     = numpy.linspace(start=-0.5*undulator_length, stop=0.5*undulator_length, num=self.number_of_waist_fit_points)
+        sizes_e_x     = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_e_y     = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_ph_x    = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_ph_y    = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_ph_an_x = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_ph_an_y = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_tot_x   = numpy.zeros(self.number_of_waist_fit_points)
+        sizes_tot_y   = numpy.zeros(self.number_of_waist_fit_points)
+
 
         for i in range(self.number_of_waist_fit_points):
             position = positions[i]
@@ -1543,27 +1550,29 @@ class HybridUndulator(GenericElement):
 
             x, y, intensity_distribution = self.transform_srw_array(arI, wfr.mesh)
 
-            def get_size(coord, intensity_distribution, projection_axis, ebeam_index):
+            def get_size(position, coord, intensity_distribution, projection_axis, ebeam_index):
                 sigma_e  = numpy.sqrt(elecBeam.arStatMom2[ebeam_index])
                 histo    = numpy.sum(intensity_distribution, axis=projection_axis)
                 sigma    = get_sigma(histo, coord) if self.use_sigma_or_fwhm==0 else get_fwhm(histo, coord)[0]/2.355
+                sigma_an = numpy.sqrt(gauss_sigma_ph**2 + (position*numpy.tan(gauss_sigmap_ph))**2)
 
                 if numpy.isnan(sigma): sigma = 0.0
 
-                return sigma_e, sigma, numpy.sqrt(sigma**2 + sigma_e**2)
+                return sigma_e, sigma, sigma_an, numpy.sqrt(sigma**2 + sigma_e**2)
 
-            sizes_e_x[i], sizes_ph_x[i], sizes_tot_x[i] = get_size(x, intensity_distribution, 1, 0)
-            sizes_e_y[i], sizes_ph_y[i], sizes_tot_y[i] = get_size(y, intensity_distribution, 0, 3)
+            sizes_e_x[i], sizes_ph_x[i], sizes_ph_an_x[i], sizes_tot_x[i] = get_size(position, x, intensity_distribution, 1, 0)
+            sizes_e_y[i], sizes_ph_y[i], sizes_ph_an_y[i], sizes_tot_y[i] = get_size(position, y, intensity_distribution, 0, 3)
 
-        def plot(direction, positions, sizes_e, sizes_ph, sizes_tot, waist_position, waist_size):
+        def plot(direction, positions, sizes_e, sizes_ph, size_ph_an, sizes_tot, waist_position, waist_size):
             self.waist_axes[direction].clear()
             self.waist_axes[direction].set_title(("Horizontal" if direction == 0 else "Vertical") + " Direction\n" +
                                                  "Source size: " + str(round(waist_size * 1e6, 2)) + " " + r'$\mu$' + "m \n" +
                                                  "at " + str(round(waist_position * 1e3, 1)) + " mm from the ID center")
 
-            self.waist_axes[direction].plot(positions*1e3, sizes_e*1e6,   label='electron')
-            self.waist_axes[direction].plot(positions*1e3, sizes_ph*1e6,  label='photon')
-            self.waist_axes[direction].plot(positions*1e3, sizes_tot*1e6, label='total')
+            self.waist_axes[direction].plot(positions*1e3, sizes_e*1e6,   label='electron', color='g')
+            self.waist_axes[direction].plot(positions*1e3, sizes_ph*1e6,  label='photon', color='b')
+            self.waist_axes[direction].plot(positions*1e3, size_ph_an*1e6,  '--', label='photon (analytical)', color='b')
+            self.waist_axes[direction].plot(positions*1e3, sizes_tot*1e6, label='total', color='r')
             self.waist_axes[direction].plot([waist_position*1e3], [waist_size*1e6], 'bo', label="waist")
             self.waist_axes[direction].set_xlabel("Position relative to ID center [mm]")
             self.waist_axes[direction].set_ylabel("Sigma [um]")
@@ -1590,8 +1599,8 @@ class HybridUndulator(GenericElement):
         waist_position_x, waist_size_x = get_minimum(positions, sizes_tot_x)
         waist_position_y, waist_size_y = get_minimum(positions, sizes_tot_y)
 
-        plot(0, positions, sizes_e_x, sizes_ph_x, sizes_tot_x, waist_position_x, waist_size_x)
-        plot(1, positions, sizes_e_y, sizes_ph_y, sizes_tot_y, waist_position_y, waist_size_y)
+        plot(0, positions, sizes_e_x, sizes_ph_x, sizes_ph_an_x, sizes_tot_x, waist_position_x, waist_size_x)
+        plot(1, positions, sizes_e_y, sizes_ph_y, sizes_ph_an_y, sizes_tot_y, waist_position_y, waist_size_y)
 
         try:
             self.waist_figure.draw()
