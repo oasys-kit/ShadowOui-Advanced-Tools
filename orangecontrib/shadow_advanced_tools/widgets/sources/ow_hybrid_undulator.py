@@ -1132,6 +1132,9 @@ class HybridUndulator(GenericElement):
                                                                  kind_of_sampler=self.kind_of_sampler,
                                                                  seed=0 if self.seed==0 else self.seed+2)
 
+            if self.distribution_source == 0 and self.is_canted_undulator() and self.waist_position != 0.0:
+                beam_out._beam.retrace(-self.waist_position/self.workspace_units_to_m) # put the beam at the center of the ID
+
             self.setStatusMessage("Plotting Results")
 
             self.progressBarSet(80)
@@ -1679,6 +1682,7 @@ class HybridUndulator(GenericElement):
                 if self.waist_position_calculation == 0:  # None
                     self.waist_position = 0.0
                 elif self.waist_position_calculation == 1:  # Automatic
+                    if self.use_harmonic == 2: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed when Photon Energy Setting: Range")
                     if self.compute_power: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed while running a thermal load loop")
 
                     self.waist_position_auto_h, self.waist_position_auto_v = self.calculate_automatic_waste_position(energy)
