@@ -670,7 +670,7 @@ class PowerPlotXY(AutomaticElement):
                     self.plot_canvas = PowerPlotXYWidget()
                     self.image_box.layout().addWidget(self.plot_canvas)
 
-                cumulated_power_plot = numpy.sum(histogram)*pixel_area
+                cumulated_power_plot = numpy.sum(ticket["histogram"])*pixel_area
 
                 energy_min=0.0
                 energy_max=0.0
