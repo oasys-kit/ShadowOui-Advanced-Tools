@@ -65,9 +65,6 @@ from oasys.widgets import congruence
 from oasys.util.oasys_util import TriggerIn, TriggerOut
 from oasys.widgets.exchange import DataExchangeObject
 
-from syned.storage_ring.light_source import LightSource
-#from syned.widget.widget_decorator import WidgetDecorator
-
 AUTOBINNING_FILE = "autobinning.dat"
 FILTERS_FILE     = "filters.dat"
 
