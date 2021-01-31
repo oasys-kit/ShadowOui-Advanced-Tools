@@ -51,6 +51,7 @@ import numpy
 import scipy.ndimage.filters as filters
 import scipy.ndimage.interpolation as interpolation
 import scipy.ndimage.fourier as fourier
+import scipy.constants as codata
 
 from PyQt5.QtWidgets import QMessageBox, QFileDialog, QInputDialog
 from PyQt5.QtGui import QTextCursor
@@ -60,26 +61,28 @@ from orangewidget.settings import Setting
 from oasys.widgets import gui as oasysgui
 from oasys.widgets import congruence
 from oasys.widgets.gui import ConfirmDialog
+from oasys.widgets.exchange import DataExchangeObject
 
 from oasys.util.oasys_util import EmittingStream
 
 from orangecontrib.shadow.util.shadow_objects import ShadowBeam
-from orangecontrib.shadow.util.shadow_util import ShadowCongruence, ShadowPlot
+from orangecontrib.shadow.util.shadow_util import ShadowCongruence, ShadowPlot, ShadowPhysics
 from orangecontrib.shadow.widgets.gui.ow_automatic_element import AutomaticElement
 from orangecontrib.shadow_advanced_tools.util.gui import PowerPlotXYWidget
 
-class PowerPlotXY(AutomaticElement):
+class PowerPlotXYBM(AutomaticElement):
 
-    name = "Power Plot XY - Undulator"
-    description = "Display Data Tools: Power Plot XY - Undulator"
-    icon = "icons/plot_xy_power.png"
+    name = "Power Plot XY - BM"
+    description = "Display Data Tools: Power Plot XY - BM"
+    icon = "icons/bm_plot_xy_power.png"
     maintainer = "Luca Rebuffi"
     maintainer_email = "lrebuffi(@at@)anl.gov"
-    priority = 5.1
+    priority = 5.101
     category = "Display Data Tools"
     keywords = ["data", "file", "load", "read"]
 
-    inputs = [("Input Beam", ShadowBeam, "setBeam")]
+    inputs = [("Input Beam", ShadowBeam, "setBeam"),
+              ("Input Spectrum", DataExchangeObject, "setFlux")]
 
     IMAGE_WIDTH = 878
     IMAGE_HEIGHT = 570
@@ -103,27 +106,11 @@ class PowerPlotXY(AutomaticElement):
     y_range_min=Setting(0.0)
     y_range_max=Setting(0.0)
 
-    rays=Setting(1)
+    rays=Setting(0)
     number_of_bins=Setting(100) # for retrocompatibility: I don't change the name
     number_of_bins_v=Setting(100)
 
     title=Setting("X,Z")
-
-    keep_result=Setting(1)
-    autosave_partial_results = Setting(0)
-
-    autosave = Setting(0)
-    autosave_file_name = Setting("autosave_power_density.hdf5")
-
-    kind_of_calculation = Setting(0)
-    replace_poor_statistic = Setting(0)
-    good_rays_limit = Setting(100)
-    center_x = Setting(0.0)
-    center_y = Setting(0.0)
-    sigma_x = Setting(0.0)
-    sigma_y = Setting(0.0)
-    gamma = Setting(0.0)
-
 
     loaded_plot_file_name = "<load hdf5 file>"
 
@@ -137,6 +124,11 @@ class PowerPlotXY(AutomaticElement):
     filter_cval = Setting(0.0)
     filter_spline_order = Setting(2)
     masking_level = Setting(1e-3)
+
+    nbins_interpolation = Setting(500)
+
+    initial_flux = None
+    initial_energy = None
 
     cumulated_ticket=None
     plotted_ticket   = None
@@ -167,7 +159,6 @@ class PowerPlotXY(AutomaticElement):
 
         # graph tab
         tab_set = oasysgui.createTabPage(self.tabs_setting, "Plot Settings")
-        tab_gen = oasysgui.createTabPage(self.tabs_setting, "Histogram Settings")
         tab_post = oasysgui.createTabPage(self.tabs_setting, "Post Processing")
 
         screen_box = oasysgui.widgetBox(tab_set, "Screen Position Settings", addSpace=True, orientation="vertical", height=120)
@@ -186,7 +177,7 @@ class PowerPlotXY(AutomaticElement):
 
         self.set_ImagePlane()
 
-        general_box = oasysgui.widgetBox(tab_set, "Variables Settings", addSpace=True, orientation="vertical", height=350)
+        general_box = oasysgui.widgetBox(tab_set, "Histogram Settings", addSpace=True, orientation="vertical", height=380)
 
         self.x_column = gui.comboBox(general_box, self, "x_column_index", label="X Column",labelWidth=70,
                                      items=["1: X",
@@ -200,15 +191,15 @@ class PowerPlotXY(AutomaticElement):
                                             "Set.."],
                                      callback=self.set_XRange, sendSelectedValue=False, orientation="horizontal")
 
-        self.xrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
-        self.xrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
+        self.xrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=60)
+        self.xrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=60)
 
         oasysgui.lineEdit(self.xrange_box, self, "x_range_min", "X min", labelWidth=220, valueType=float, orientation="horizontal")
         oasysgui.lineEdit(self.xrange_box, self, "x_range_max", "X max", labelWidth=220, valueType=float, orientation="horizontal")
 
         self.set_XRange()
 
-        self.y_column = gui.comboBox(general_box, self, "y_column_index", label="Y Column",labelWidth=70,
+        self.y_column = gui.comboBox(general_box, self, "y_column_index", label="Y Column", labelWidth=70,
                                      items=["1: X",
                                             "2: Y",
                                             "3: Z",
@@ -221,75 +212,23 @@ class PowerPlotXY(AutomaticElement):
                                             "Set.."],
                                      callback=self.set_YRange, sendSelectedValue=False, orientation="horizontal")
 
-        self.yrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
-        self.yrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
+        self.yrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=60)
+        self.yrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=60)
 
         oasysgui.lineEdit(self.yrange_box, self, "y_range_min", "Y min", labelWidth=220, valueType=float, orientation="horizontal")
         oasysgui.lineEdit(self.yrange_box, self, "y_range_max", "Y max", labelWidth=220, valueType=float, orientation="horizontal")
 
         self.set_YRange()
 
+
+        oasysgui.lineEdit(general_box, self, "number_of_bins", "Number of Bins H", labelWidth=250, valueType=int, orientation="horizontal")
+        oasysgui.lineEdit(general_box, self, "number_of_bins_v", "Number of Bins V", labelWidth=250, valueType=int, orientation="horizontal")
+
+        gui.separator(general_box)
+
         self.cb_rays = gui.comboBox(general_box, self, "rays", label="Power", labelWidth=250,
                                     items=["Transmitted", "Absorbed (Lost)", "Absorbed (Still Good)"],
                                     sendSelectedValue=False, orientation="horizontal")
-
-        autosave_box = oasysgui.widgetBox(tab_gen, "Autosave", addSpace=True, orientation="vertical", height=85)
-
-        gui.comboBox(autosave_box, self, "autosave", label="Save automatically plot into file", labelWidth=250,
-                                         items=["No", "Yes"],
-                                         sendSelectedValue=False, orientation="horizontal", callback=self.set_autosave)
-
-        self.autosave_box_1 = oasysgui.widgetBox(autosave_box, "", addSpace=False, orientation="horizontal", height=25)
-        self.autosave_box_2 = oasysgui.widgetBox(autosave_box, "", addSpace=False, orientation="horizontal", height=25)
-
-        self.le_autosave_file_name = oasysgui.lineEdit(self.autosave_box_1, self, "autosave_file_name", "File Name", labelWidth=100,  valueType=str, orientation="horizontal")
-
-        gui.button(self.autosave_box_1, self, "...", callback=self.selectAutosaveFile)
-
-        incremental_box = oasysgui.widgetBox(tab_gen, "Incremental Result", addSpace=True, orientation="vertical", height=120)
-
-        gui.comboBox(incremental_box, self, "keep_result", label="Keep Result", labelWidth=250,
-                     items=["No", "Yes"], sendSelectedValue=False, orientation="horizontal", callback=self.set_autosave)
-
-        self.cb_autosave_partial_results = gui.comboBox(incremental_box, self, "autosave_partial_results", label="Save partial plots into file", labelWidth=250,
-                                                        items=["No", "Yes"], sendSelectedValue=False, orientation="horizontal")
-
-        gui.button(incremental_box, self, "Clear", callback=self.clearResults)
-
-        self.set_autosave()
-
-        histograms_box = oasysgui.widgetBox(tab_gen, "Histograms settings", addSpace=True, orientation="vertical", height=300)
-
-        oasysgui.lineEdit(histograms_box, self, "number_of_bins", "Number of Bins H", labelWidth=250, valueType=int, orientation="horizontal")
-        oasysgui.lineEdit(histograms_box, self, "number_of_bins_v", "Number of Bins V", labelWidth=250, valueType=int, orientation="horizontal")
-
-        gui.separator(histograms_box)
-
-        gui.comboBox(histograms_box, self, "kind_of_calculation", label="Kind of Calculation", labelWidth=200,
-                     items=["From Rays", "Flat Distribution", "Gaussian Distribution", "Lorentzian Distribution"], sendSelectedValue=False, orientation="horizontal", callback=self.set_kind_of_calculation)
-
-        self.poor_statics_cb = gui.comboBox(histograms_box, self, "replace_poor_statistic", label="Activate on Poor Statistics", labelWidth=250,
-                                            items=["No", "Yes"], sendSelectedValue=False, orientation="horizontal", callback=self.set_manage_poor_statistics)
-
-        self.poor_statistics_box_1 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=30)
-        self.poor_statistics_box_2 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=30)
-
-        self.le_autosave_file_name = oasysgui.lineEdit(self.poor_statistics_box_1, self, "good_rays_limit", "Good Rays Limit", labelWidth=100,  valueType=int, orientation="horizontal")
-
-        self.kind_of_calculation_box_1 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=110)
-        self.kind_of_calculation_box_2 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=110)
-        self.kind_of_calculation_box_3 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=110)
-
-        self.le_g_sigma_x = oasysgui.lineEdit(self.kind_of_calculation_box_2, self, "sigma_x", "Sigma H", labelWidth=100,  valueType=float, orientation="horizontal")
-        self.le_g_sigma_y = oasysgui.lineEdit(self.kind_of_calculation_box_2, self, "sigma_y", "Sigma V", labelWidth=100,  valueType=float, orientation="horizontal")
-        self.le_g_center_x = oasysgui.lineEdit(self.kind_of_calculation_box_2, self, "center_x", "Center H", labelWidth=100,  valueType=float, orientation="horizontal")
-        self.le_g_center_y = oasysgui.lineEdit(self.kind_of_calculation_box_2, self, "center_y", "Center V", labelWidth=100,  valueType=float, orientation="horizontal")
-
-        self.le_l_gamma = oasysgui.lineEdit(self.kind_of_calculation_box_3, self, "gamma", "Gamma", labelWidth=100,  valueType=float, orientation="horizontal")
-        self.le_l_center_x = oasysgui.lineEdit(self.kind_of_calculation_box_3, self, "center_x", "Center H", labelWidth=100,  valueType=float, orientation="horizontal")
-        self.le_l_center_y = oasysgui.lineEdit(self.kind_of_calculation_box_3, self, "center_y", "Center V", labelWidth=100,  valueType=float, orientation="horizontal")
-
-        self.set_kind_of_calculation()
 
         # post porcessing
 
@@ -362,7 +301,7 @@ class PowerPlotXY(AutomaticElement):
         view_box = oasysgui.widgetBox(plot_tab, "Plotting", addSpace=False, orientation="vertical", width=self.IMAGE_WIDTH)
         view_box_1 = oasysgui.widgetBox(view_box, "", addSpace=False, orientation="vertical", width=350)
 
-        gui.comboBox(view_box_1, self, "view_type", label="Plot Accumulated Results", labelWidth=320,
+        gui.comboBox(view_box_1, self, "view_type", label="Plot Results", labelWidth=320,
                      items=["No", "Yes"],  sendSelectedValue=False, orientation="horizontal")
 
         self.image_box = gui.widgetBox(plot_tab, "Plot Result", addSpace=True, orientation="vertical")
@@ -388,35 +327,8 @@ class PowerPlotXY(AutomaticElement):
             self.total_power = None
             self.cumulated_total_power = None
 
-            if not self.autosave_file is None:
-                self.autosave_file.close()
-                self.autosave_file = None
-
             if not self.plot_canvas is None:
                 self.plot_canvas.clear()
-
-    def set_kind_of_calculation(self):
-        self.kind_of_calculation_box_1.setVisible(self.kind_of_calculation<=1)
-        self.kind_of_calculation_box_2.setVisible(self.kind_of_calculation==2)
-        self.kind_of_calculation_box_3.setVisible(self.kind_of_calculation==3)
-
-        if self.kind_of_calculation > 0:
-            self.poor_statics_cb.setEnabled(True)
-        else:
-            self.poor_statics_cb.setEnabled(False)
-            self.replace_poor_statistic = 0
-
-        self.set_manage_poor_statistics()
-
-    def set_manage_poor_statistics(self):
-        self.poor_statistics_box_1.setVisible(self.replace_poor_statistic==1)
-        self.poor_statistics_box_2.setVisible(self.replace_poor_statistic==0)
-
-    def set_autosave(self):
-        self.autosave_box_1.setVisible(self.autosave==1)
-        self.autosave_box_2.setVisible(self.autosave==0)
-
-        self.cb_autosave_partial_results.setEnabled(self.autosave==1 and self.keep_result==1)
 
     def set_ImagePlane(self):
         self.image_plane_box.setVisible(self.image_plane==1)
@@ -440,9 +352,6 @@ class PowerPlotXY(AutomaticElement):
 
     def set_FilterMode(self):
         self.le_filter_cval.setEnabled(self.filter_mode==1)
-
-    def selectAutosaveFile(self):
-        self.le_autosave_file_name.setText(oasysgui.selectFileFromDialog(self, self.autosave_file_name, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)"))
 
     def selectPlotFile(self):
         file_name = oasysgui.selectFileFromDialog(self, None, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)")
@@ -793,75 +702,16 @@ class PowerPlotXY(AutomaticElement):
         if self.plot_canvas is None:
             self.plot_canvas = PowerPlotXYWidget()
             self.image_box.layout().addWidget(self.plot_canvas)
+        else:
+            self.plot_canvas.clear()
 
         try:
-            if self.autosave == 1:
-                if self.autosave_file is None:
-                    self.autosave_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(self.autosave_file_name))
-                elif self.autosave_file.filename != congruence.checkFileName(self.autosave_file_name):
-                    self.autosave_file.close()
-                    self.autosave_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(self.autosave_file_name))
+            ticket = self.plot_canvas.plot_power_density_BM(shadow_beam, self.initial_energy, self.initial_flux, self.nbins_interpolation,
+                                                            var_x, var_y, nbins_h, nbins_v, xrange, yrange, nolost,
+                                                            show_image=self.view_type==1, to_mm=self.workspace_units_to_mm)
 
-            if self.keep_result == 1:
-                self.cumulated_ticket, last_ticket = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
-                                                                                         self.total_power, self.cumulated_total_power,
-                                                                                         self.energy_min, self.energy_max, self.energy_step,
-                                                                                         nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=nolost,
-                                                                                         ticket_to_add=self.cumulated_ticket,
-                                                                                         to_mm=self.workspace_units_to_mm,
-                                                                                         show_image=self.view_type==1,
-                                                                                         kind_of_calculation=self.kind_of_calculation,
-                                                                                         replace_poor_statistic=self.replace_poor_statistic,
-                                                                                         good_rays_limit=self.good_rays_limit,
-                                                                                         center_x=self.center_x,
-                                                                                         center_y=self.center_y,
-                                                                                         sigma_x=self.sigma_x,
-                                                                                         sigma_y=self.sigma_y,
-                                                                                         gamma=self.gamma)
-                self.plotted_ticket = self.cumulated_ticket
-                self.plotted_ticket_original = self.plotted_ticket.copy()
-
-                if self.autosave == 1:
-                    self.autosave_file.write_coordinates(self.cumulated_ticket)
-                    dataset_name = "power_density"
-
-                    self.autosave_file.add_plot_xy(self.cumulated_ticket, dataset_name=dataset_name)
-
-                    if self.autosave_partial_results == 1:
-                        if last_ticket is None:
-                            self.autosave_file.add_plot_xy(self.cumulated_ticket,
-                                                           plot_name="Energy Range: " + str(round(self.energy_max-self.energy_step, 2)) + "-" + str(round(self.energy_max, 2)),
-                                                           dataset_name=dataset_name)
-                        else:
-                            self.autosave_file.add_plot_xy(last_ticket,
-                                                           plot_name="Energy Range: " + str(round(self.energy_max-self.energy_step, 2)) + "-" + str(round(self.energy_max, 2)),
-                                                           dataset_name=dataset_name)
-
-                    self.autosave_file.flush()
-            else:
-                ticket, _ = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
-                                                                self.total_power, self.cumulated_total_power,
-                                                                self.energy_min, self.energy_max, self.energy_step,
-                                                                nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=nolost,
-                                                                to_mm=self.workspace_units_to_mm,
-                                                                show_image=self.view_type==1,
-                                                                kind_of_calculation=self.kind_of_calculation,
-                                                                replace_poor_statistic=self.replace_poor_statistic,
-                                                                good_rays_limit=self.good_rays_limit,
-                                                                center_x=self.center_x,
-                                                                center_y=self.center_y,
-                                                                sigma_x=self.sigma_x,
-                                                                sigma_y=self.sigma_y,
-                                                                gamma=self.gamma)
-
-                self.cumulated_ticket = None
-                self.plotted_ticket = ticket
-                self.plotted_ticket_original = self.plotted_ticket.copy()
-
-                if self.autosave == 1:
-                    self.autosave_file.write_coordinates(ticket)
-                    self.autosave_file.add_plot_xy(ticket, dataset_name="power_density")
-                    self.autosave_file.flush()
+            self.plotted_ticket = ticket
+            self.plotted_ticket_original = self.plotted_ticket.copy()
 
         except Exception as e:
             if not self.IS_DEVELOP:
@@ -870,7 +720,7 @@ class PowerPlotXY(AutomaticElement):
                 raise e
 
     def plot_xy(self, var_x, var_y):
-        beam_to_plot = self.input_beam
+        beam_to_plot = self.input_beam.duplicate()
 
         if ShadowCongruence.checkGoodBeam(beam_to_plot):
             if self.image_plane == 1:
@@ -932,17 +782,8 @@ class PowerPlotXY(AutomaticElement):
         return xrange, yrange
 
     def plot_cumulated_data(self):
-        if not self.cumulated_ticket is None:
-            self.plot_canvas.plot_power_density_ticket(ticket=self.cumulated_ticket,
-                                                       var_x=self.x_column_index+1,
-                                                       var_y=self.y_column_index+1,
-                                                       cumulated_total_power=self.cumulated_total_power,
-                                                       energy_min=self.energy_min,
-                                                       energy_max=self.energy_max,
-                                                       energy_step=self.energy_step,
-                                                       show_image=self.view_type==1)
-
-            self.plotted_ticket_original = self.cumulated_ticket.copy()
+        if not self.plotted_ticket is None:
+            self.plot_results()
 
     def plot_results(self):
         try:
@@ -965,30 +806,51 @@ class PowerPlotXY(AutomaticElement):
         self.cb_rays.setEnabled(True)
 
         if not input_beam is None:
-            if not input_beam.scanned_variable_data is None and input_beam.scanned_variable_data.has_additional_parameter("total_power"):
-                self.input_beam = input_beam
+            self.input_beam = input_beam.duplicate()
 
-                self.total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
-
-                if self.energy_min is None:
-                    self.energy_min  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
-                    self.cumulated_total_power = self.total_power
+            if self.input_beam.scanned_variable_data and self.input_beam.scanned_variable_data.has_additional_parameter("is_footprint"):
+                if self.input_beam.scanned_variable_data.get_additional_parameter("is_footprint"):
+                    self.cb_rays.setEnabled(False)
+                    self.rays = 0 # transmitted, absorbed doesn't make sense since is precalculated by footprint object
                 else:
-                    self.cumulated_total_power += self.total_power
+                    self.cb_rays.setEnabled(True)
 
-                self.energy_step = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
-                self.energy_max  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
-
-                if self.input_beam.scanned_variable_data.has_additional_parameter("is_footprint"):
-                    if self.input_beam.scanned_variable_data.get_additional_parameter("is_footprint"):
-                        self.cb_rays.setEnabled(False)
-                        self.rays = 0 # transmitted, absorbed doesn't make sense since is precalculated by footprint object
-                    else:
-                        self.cb_rays.setEnabled(True)
-
-                if ShadowCongruence.checkEmptyBeam(input_beam):
-                    if ShadowCongruence.checkGoodBeam(input_beam):
+            if ShadowCongruence.checkEmptyBeam(self.input_beam):
+                if ShadowCongruence.checkGoodBeam(self.input_beam):
+                    if not self.initial_flux is None:
                         self.plot_results()
+
+    def setFlux(self, exchange_data):
+        if not exchange_data is None:
+            if exchange_data.get_program_name() == "XOPPY" and exchange_data.get_widget_name() == "BM":
+                    if exchange_data.get_content("is_log_plot") == 1:
+                        raise Exception("Logarithmic X scale of Xoppy Energy distribution not supported")
+                    elif exchange_data.get_content("calculation_type") == 0 and exchange_data.get_content("psi") == 0:
+                        user_defined_file = "xoppy_bm_flux"
+                        index_flux = 5
+                    else:
+                        raise Exception("Xoppy result is not an Flux vs Energy distribution integrated in Psi")
+            else:
+                raise Exception("Exchange data are not from a XOPPY BM widget")
+
+            spectrum = exchange_data.get_content("xoppy_data")
+            self.initial_flux = spectrum[:, index_flux]
+            self.initial_energy = spectrum[:, 0]
+
+            initial_energy_step = self.initial_energy[1] - self.initial_energy[0]
+
+            self.total_initial_power = self.initial_flux.sum() * 1e3 * codata.e * initial_energy_step
+
+            print("Total Initial Power from XOPPY", self.total_initial_power)
+
+            if not self.input_beam is None:
+                if ShadowCongruence.checkEmptyBeam(self.input_beam):
+                    if ShadowCongruence.checkGoodBeam(self.input_beam):
+                        self.plot_results()
+
+        else:
+            self.initial_flux = None
+            self.initial_energy = None
 
     def writeStdOut(self, text):
         cursor = self.shadow_output.textCursor()

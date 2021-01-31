@@ -57,6 +57,8 @@ except:
 from Shadow import Beam
 
 from silx.gui.plot import Plot2D
+import scipy.constants as codata
+from orangecontrib.shadow.util.shadow_util import ShadowPhysics
 
 class PowerPlotXYWidget(QWidget):
     
@@ -94,6 +96,182 @@ class PowerPlotXYWidget(QWidget):
             return ticket, last_ticket
         else:
             return ticket, None
+
+    def plot_power_density_BM(self, shadow_beam, initial_energy, initial_flux, nbins_interpolation,
+                              var_x, var_y, nbins_h=100, nbins_v=100, xrange=None, yrange=None, nolost=1, to_mm=1.0, show_image=True):
+        n_rays = len(shadow_beam._beam.rays[:, 0]) # lost and good!
+
+        if n_rays == 0:
+            ticket, _ = self.manage_empty_beam(None,
+                                               nbins_h,
+                                               nbins_v,
+                                               xrange,
+                                               yrange,
+                                               var_x,
+                                               var_y,
+                                               0.0,
+                                               0.0,
+                                               0.0,
+                                               0.0,
+                                               show_image,
+                                               to_mm)
+            return ticket
+
+        source_beam  = shadow_beam.getOEHistory(oe_number=1)._input_beam.duplicate(history=False)
+        history_item = shadow_beam.getOEHistory(oe_number=shadow_beam._oe_number)
+
+        if history_item is None or history_item._input_beam is None:
+            previous_beam = shadow_beam
+        else:
+            previous_beam = history_item._input_beam.duplicate(history=False)
+
+        rays_energy = ShadowPhysics.getEnergyFromShadowK(shadow_beam._beam.rays[:, 10])
+        energy_range = [numpy.min(rays_energy), numpy.max(rays_energy)]
+
+        ticket_initial = source_beam._beam.histo1(11, xrange=energy_range, nbins=nbins_interpolation, nolost=1, ref=23)
+
+        energy_bins = ticket_initial["bin_center"]
+
+        energy_min = energy_bins[0]
+        energy_max = energy_bins[-1]
+        energy_step = energy_bins[1] - energy_bins[0]
+
+        initial_flux_shadow = numpy.interp(energy_bins, initial_energy, initial_flux, left=initial_flux[0], right=initial_flux[-1])
+        initial_power_shadow = initial_flux_shadow * 1e3 * codata.e * energy_step
+
+        total_initial_power_shadow = initial_power_shadow.sum()
+
+        print("Total Initial Power from Shadow", total_initial_power_shadow)
+
+        if nolost>1: # must be calculating only the rays the become lost in the last object
+            current_beam = shadow_beam
+
+            if history_item is None or history_item._input_beam is None:
+                beam = shadow_beam._beam
+            else:
+                if nolost==2:
+                    current_lost_rays_cursor = numpy.where(current_beam._beam.rays[:, 9] != 1)
+
+                    current_lost_rays          = current_beam._beam.rays[current_lost_rays_cursor]
+                    lost_rays_in_previous_beam = previous_beam._beam.rays[current_lost_rays_cursor]
+
+                    lost_that_were_good_rays_cursor = numpy.where(lost_rays_in_previous_beam[:, 9] == 1)
+
+                    beam = Beam()
+                    beam.rays = current_lost_rays[lost_that_were_good_rays_cursor] # lost rays that were good after the previous OE
+
+                    # in case of filters, Shadow computes the absorption for lost rays. This cause an imbalance on the total power.
+                    # the lost rays that were good must have the same intensity they had before the optical element.
+
+                    beam.rays[:, 6]  = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 6]
+                    beam.rays[:, 7]  = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 7]
+                    beam.rays[:, 8]  = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 8]
+                    beam.rays[:, 15] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 15]
+                    beam.rays[:, 16] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 16]
+                    beam.rays[:, 17] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 17]
+                else:
+                    incident_rays = previous_beam._beam.rays
+                    transmitted_rays = current_beam._beam.rays
+
+                    incident_intensity = incident_rays[:, 6]**2  + incident_rays[:, 7]**2  + incident_rays[:, 8]**2 +\
+                                         incident_rays[:, 15]**2 + incident_rays[:, 16]**2 + incident_rays[:, 17]**2
+                    transmitted_intensity = transmitted_rays[:, 6]**2  + transmitted_rays[:, 7]**2  + transmitted_rays[:, 8]**2 +\
+                                            transmitted_rays[:, 15]**2 + transmitted_rays[:, 16]**2 + transmitted_rays[:, 17]**2
+
+                    electric_field = numpy.sqrt(incident_intensity - transmitted_intensity)
+                    electric_field[numpy.where(electric_field == numpy.nan)] = 0.0
+
+                    beam = Beam()
+                    beam.rays = copy.deepcopy(shadow_beam._beam.rays)
+
+                    beam.rays[:, 6]  = electric_field
+                    beam.rays[:, 7]  = 0.0
+                    beam.rays[:, 8]  = 0.0
+                    beam.rays[:, 15] = 0.0
+                    beam.rays[:, 16] = 0.0
+                    beam.rays[:, 17] = 0.0
+        else:
+            beam = shadow_beam._beam
+
+        if len(beam.rays) == 0:
+            ticket, _ = self.manage_empty_beam(None,
+                                               nbins_h,
+                                               nbins_v,
+                                               xrange,
+                                               yrange,
+                                               var_x,
+                                               var_y,
+                                               0.0,
+                                               energy_min,
+                                               energy_max,
+                                               energy_step,
+                                               show_image,
+                                               to_mm)
+            return ticket
+
+        ticket_incident = previous_beam._beam.histo1(11, xrange=energy_range, nbins=nbins_interpolation, nolost=1, ref=23) # intensity of good rays per bin incident
+        ticket_final    = beam.histo1(11, xrange=energy_range, nbins=nbins_interpolation, nolost=1, ref=23) # intensity of good rays per bin
+
+        good = numpy.where(ticket_initial["histogram"] > 0)
+
+        efficiency_incident = numpy.zeros(len(ticket_incident["histogram"]))
+        efficiency_incident[good]  = ticket_incident["histogram"][good] / ticket_initial["histogram"][good]
+
+        incident_power_shadow = initial_power_shadow * efficiency_incident
+
+        total_incident_power_shadow = incident_power_shadow.sum()
+        print("Total Incident Power from Shadow", total_incident_power_shadow)
+
+        efficiency_final = numpy.zeros(len(ticket_final["histogram"]))
+        efficiency_final[good]  = ticket_final["histogram"][good] / ticket_initial["histogram"][good]
+
+        final_power_shadow = initial_power_shadow * efficiency_final
+
+        total_final_power_shadow = final_power_shadow.sum()
+        print("Total Final Power from Shadow", total_final_power_shadow)
+
+        # CALCULATE POWER DENSITY PER EACH RAY -------------------------------------------------------
+
+        ticket = beam.histo1(11, xrange=energy_range, nbins=nbins_interpolation, nolost=1, ref=0) # number of rays per bin
+        good = numpy.where(ticket["histogram"] > 0)
+
+        final_power_per_ray = numpy.zeros(len(final_power_shadow))
+        final_power_per_ray[good] = final_power_shadow[good] / ticket["histogram"][good]
+
+        go = numpy.where(shadow_beam._beam.rays[:, 9] == 1)
+
+        rays_energy = ShadowPhysics.getEnergyFromShadowK(shadow_beam._beam.rays[go, 10])
+
+        ticket = beam.histo2(var_x, var_y, nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=1, ref=0)
+
+        ticket['bin_h_center'] *= to_mm
+        ticket['bin_v_center'] *= to_mm
+        pixel_area = (ticket['bin_h_center'][1] - ticket['bin_h_center'][0]) * (ticket['bin_v_center'][1] - ticket['bin_v_center'][0])
+
+        power_density = numpy.interp(rays_energy, energy_bins, final_power_per_ray, left=0, right=0) / pixel_area
+
+        final_beam = Beam()
+        final_beam.rays = copy.deepcopy(beam.rays)
+
+        final_beam.rays[go, 6] = numpy.sqrt(power_density)
+        final_beam.rays[go, 7] = 0.0
+        final_beam.rays[go, 8] = 0.0
+        final_beam.rays[go, 15] = 0.0
+        final_beam.rays[go, 16] = 0.0
+        final_beam.rays[go, 17] = 0.0
+
+        ticket = final_beam.histo2(var_x, var_y,
+                                   nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange,
+                                   nolost=1, ref=23)
+
+        ticket['histogram'][numpy.where(ticket['histogram'] < 1e-7)] = 0.0
+
+        self.cumulated_previous_power_plot = total_incident_power_shadow
+        self.cumulated_power_plot = total_final_power_shadow
+
+        self.plot_power_density_ticket(ticket, var_x, var_y, total_initial_power_shadow, energy_min, energy_max, energy_step, show_image)
+
+        return ticket
 
     def plot_power_density(self, shadow_beam, var_x, var_y, total_power, cumulated_total_power, energy_min, energy_max, energy_step,
                            nbins_h=100, nbins_v=100, xrange=None, yrange=None, nolost=1, ticket_to_add=None, to_mm=1.0, show_image=True,

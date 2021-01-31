@@ -108,11 +108,10 @@ class FootprintFileReader(oasyswidget.OWWidget):
 
     def setBeam(self, beam):
         if ShadowCongruence.checkEmptyBeam(beam[0]) and ShadowCongruence.checkGoodBeam(beam[0]):
-            if beam[0].scanned_variable_data and beam[0].scanned_variable_data.has_additional_parameter("total_power"):
-                self.input_beam     = beam[0]
-                self.footprint_beam = beam[1]
+            self.input_beam     = beam[0]
+            self.footprint_beam = beam[1]
 
-                self.calculate_footprint()
+            self.calculate_footprint()
 
     def calculate_footprint(self):
         self.setStatusMessage("")
@@ -125,21 +124,27 @@ class FootprintFileReader(oasyswidget.OWWidget):
             # just to create a safe history for possible re-tracing
             beam_out.traceFromOE(beam_out, self.create_dummy_oe(), history=True)
 
-            total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
+            is_scanning = self.input_beam.scanned_variable_data and self.input_beam.scanned_variable_data.has_additional_parameter("total_power")
 
             additional_parameters = {}
-            additional_parameters["total_power"]        = total_power
-            additional_parameters["photon_energy_step"] = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
-            additional_parameters["is_footprint"] = True
 
-            n_rays = len(beam_out._beam.rays[:, 0]) # lost and good!
+            if is_scanning:
+                total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
+
+                additional_parameters["total_power"]        = total_power
+                additional_parameters["photon_energy_step"] = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
+
+            additional_parameters["is_footprint"] = True
 
             incident_beam = self.input_beam.getOEHistory(self.input_beam._oe_number)._input_beam
 
-            ticket = incident_beam._beam.histo2(1, 3, nbins=100, xrange=None, yrange=None, nolost=1, ref=23)
-            ticket['histogram'] *= (total_power/n_rays) # power
+            if is_scanning:
+                n_rays = len(beam_out._beam.rays[:, 0]) # lost and good!
 
-            additional_parameters["incident_power"] = ticket['histogram'].sum()
+                ticket = incident_beam._beam.histo2(1, 3, nbins=100, xrange=None, yrange=None, nolost=1, ref=23)
+                ticket['histogram'] *= (total_power/n_rays) # power
+
+                additional_parameters["incident_power"] = ticket['histogram'].sum()
 
             if self.kind_of_power == 0: # incident
                 beam_out._beam.rays[:, 6]  = incident_beam._beam.rays[:, 6]
@@ -166,11 +171,16 @@ class FootprintFileReader(oasyswidget.OWWidget):
                 beam_out._beam.rays[:, 16] = 0.0
                 beam_out._beam.rays[:, 17] = 0.0
 
-            beam_out.setScanningData(ShadowBeam.ScanningData(self.input_beam.scanned_variable_data.get_scanned_variable_name(),
-                                                             self.input_beam.scanned_variable_data.get_scanned_variable_value(),
-                                                             self.input_beam.scanned_variable_data.get_scanned_variable_display_name(),
-                                                             self.input_beam.scanned_variable_data.get_scanned_variable_um(),
-                                                             additional_parameters))
+            if is_scanning:
+                beam_out.setScanningData(ShadowBeam.ScanningData(self.input_beam.scanned_variable_data.get_scanned_variable_name(),
+                                                                 self.input_beam.scanned_variable_data.get_scanned_variable_value(),
+                                                                 self.input_beam.scanned_variable_data.get_scanned_variable_display_name(),
+                                                                 self.input_beam.scanned_variable_data.get_scanned_variable_um(),
+                                                                 additional_parameters))
+            else:
+                beam_out.setScanningData(scanned_variable_data=ShadowBeam.ScanningData(None, None, None, None,
+                                                                                       additional_parameters=additional_parameters))
+
             self.send("Beam", beam_out)
         except Exception as exception:
             QtWidgets.QMessageBox.critical(self, "Error",
