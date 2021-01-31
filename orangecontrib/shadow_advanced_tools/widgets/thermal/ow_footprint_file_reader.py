@@ -118,11 +118,10 @@ class FootprintFileReader(oasyswidget.OWWidget):
 
         try:
             beam_out = self.footprint_beam.duplicate()
-            beam_out.history.append(ShadowOEHistoryItem()) # fake Source
-            beam_out._oe_number = 0
+            beam_out._oe_number = self.input_beam._oe_number
 
-            # just to create a safe history for possible re-tracing
-            beam_out.traceFromOE(beam_out, self.create_dummy_oe(), history=True)
+            for history_item in self.input_beam.history:
+                beam_out.history.append(history_item) # Source
 
             is_scanning = self.input_beam.scanned_variable_data and self.input_beam.scanned_variable_data.has_additional_parameter("total_power")
 
