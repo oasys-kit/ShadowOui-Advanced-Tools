@@ -230,6 +230,8 @@ class PowerPlotXYBM(AutomaticElement):
                                     items=["Transmitted", "Absorbed (Lost)", "Absorbed (Still Good)"],
                                     sendSelectedValue=False, orientation="horizontal")
 
+        oasysgui.lineEdit(general_box, self, "nbins_interpolation", "Number of Bins for energy interpolation", labelWidth=250, valueType=int, orientation="horizontal")
+
         # post porcessing
 
         post_box = oasysgui.widgetBox(tab_post, "Post Processing Setting", addSpace=False, orientation="vertical", height=500)
@@ -790,7 +792,9 @@ class PowerPlotXYBM(AutomaticElement):
             sys.stdout = EmittingStream(textWritten=self.writeStdOut)
 
             if ShadowCongruence.checkEmptyBeam(self.input_beam):
-                self.number_of_bins = congruence.checkStrictlyPositiveNumber(self.number_of_bins, "Number of Bins")
+                self.number_of_bins = congruence.checkStrictlyPositiveNumber(self.number_of_bins, "Number of Bins H")
+                self.number_of_bins_v = congruence.checkStrictlyPositiveNumber(self.number_of_bins_v, "Number of Bins V")
+                self.nbins_interpolation = congruence.checkStrictlyPositiveNumber(self.nbins_interpolation, "Number of Bins for energy interpolation")
 
                 self.plot_xy(self.x_column_index+1, self.y_column_index+1)
 
