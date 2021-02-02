@@ -829,11 +829,10 @@ class PowerPlotXYBM(AutomaticElement):
             if exchange_data.get_program_name() == "XOPPY" and exchange_data.get_widget_name() == "BM":
                     if exchange_data.get_content("is_log_plot") == 1:
                         raise Exception("Logarithmic X scale of Xoppy Energy distribution not supported")
-                    elif exchange_data.get_content("calculation_type") == 0 and exchange_data.get_content("psi") == 0:
-                        user_defined_file = "xoppy_bm_flux"
+                    elif exchange_data.get_content("calculation_type") == 0 and (exchange_data.get_content("psi") == 0 or exchange_data.get_content("psi") == 2):
                         index_flux = 5
                     else:
-                        raise Exception("Xoppy result is not an Flux vs Energy distribution integrated in Psi")
+                        raise Exception("Xoppy result is not an Flux vs Energy distribution integrated in a rectangular space")
             else:
                 raise Exception("Exchange data are not from a XOPPY BM widget")
 
