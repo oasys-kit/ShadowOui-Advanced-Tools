@@ -144,6 +144,8 @@ class PowerPlotXY(AutomaticElement):
     energy_max = None
     energy_step = None
     total_power = None
+    current_step = None
+    total_steps = None
     cumulated_total_power = None
 
     plotted_ticket_original = None
@@ -802,6 +804,10 @@ class PowerPlotXY(AutomaticElement):
                     self.autosave_file.close()
                     self.autosave_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(self.autosave_file_name))
 
+                self.autosave_file.add_attribute("current_step", self.current_step, dataset_name="additional_data")
+                self.autosave_file.add_attribute("total_steps", self.total_steps, dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_energy_value", self.energy_max, dataset_name="additional_data")
+
             if self.keep_result == 1:
                 self.cumulated_ticket, last_ticket = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
                                                                                          self.total_power, self.cumulated_total_power,
@@ -969,6 +975,8 @@ class PowerPlotXY(AutomaticElement):
                 self.input_beam = input_beam
 
                 self.total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
+                self.current_step = self.input_beam.scanned_variable_data.get_additional_parameter("current_step")
+                self.total_steps = self.input_beam.scanned_variable_data.get_additional_parameter("total_steps")
 
                 if self.energy_min is None:
                     self.energy_min  = self.input_beam.scanned_variable_data.get_scanned_variable_value()

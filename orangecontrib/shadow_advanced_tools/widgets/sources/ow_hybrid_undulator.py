@@ -241,6 +241,8 @@ class HybridUndulator(GenericElement):
 
     energy_step = None
     power_step = None
+    current_step = None
+    total_steps = None
     start_event = True
     compute_power = False
     integrated_flux = None
@@ -1148,6 +1150,8 @@ class HybridUndulator(GenericElement):
 
                 additional_parameters["total_power"]        = total_power
                 additional_parameters["photon_energy_step"] = self.energy_step
+                additional_parameters["current_step"] = self.current_step
+                additional_parameters["total_steps"] = self.total_steps
 
                 beam_out.setScanningData(ShadowBeam.ScanningData("photon_energy", self.energy, "Energy for Power Calculation", "eV", additional_parameters))
 
@@ -1194,6 +1198,8 @@ class HybridUndulator(GenericElement):
                 self.energy = trigger.get_additional_parameter("energy_value")
                 self.energy_step = trigger.get_additional_parameter("energy_step")
                 self.power_step = trigger.get_additional_parameter("power_step")
+                self.current_step = trigger.get_additional_parameter("current_step")
+                self.total_steps  = trigger.get_additional_parameter("total_steps")
                 self.start_event = trigger.get_additional_parameter("start_event")
 
                 self.set_WFUseHarmonic()

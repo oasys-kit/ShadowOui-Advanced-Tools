@@ -232,18 +232,6 @@ class PowerLoopPoint(widget.OWWidget):
 
         self.set_LoadFileMode()
 
-        ''' not used anymore, but...
-        tab_und = oasysgui.createTabPage(tabs, "Undulator")
-
-        left_box_2 = oasysgui.widgetBox(tab_und, "Parameters From Syned", addSpace=False, orientation="vertical", width=385, height=560)
-
-        oasysgui.lineEdit(left_box_2, self, "electron_energy", "Ring Energy [GeV]", labelWidth=260, valueType=float, orientation="horizontal").setReadOnly(True)
-        oasysgui.lineEdit(left_box_2, self, "number_of_periods", "Number of Periods", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
-        oasysgui.lineEdit(left_box_2, self, "period_length", "Undulator Period [m]", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
-        oasysgui.lineEdit(left_box_2, self, "K_vertical", "K Vertical", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
-        oasysgui.lineEdit(left_box_2, self, "K_horizontal", "K Horizontal", labelWidth=260,  valueType=float, orientation="horizontal").setReadOnly(True)
-        '''
-
         left_box_1 = oasysgui.widgetBox(tab_loop, "", addSpace=False, orientation="vertical", width=385, height=560)
 
         oasysgui.lineEdit(left_box_1, self, "seed_increment", "Source Montecarlo Seed Increment", labelWidth=250, valueType=int, orientation="horizontal")
@@ -763,6 +751,8 @@ class PowerLoopPoint(widget.OWWidget):
                                                                    "energy_step"    : self.current_energy_step,
                                                                    "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
                                                                    "seed_increment" : self.seed_increment,
+                                                                   "current_step"   : self.total_current_new_object,
+                                                                   "total_steps"    : self.total_new_objects,
                                                                    "start_event"    : True}))
         except Exception as e:
             if self.IS_DEVELOP : raise e
@@ -844,6 +834,8 @@ class PowerLoopPoint(widget.OWWidget):
                                                             additional_parameters={"energy_value"   : self.current_energy_value,
                                                                                    "energy_step"    : energy_binning.energy_step,
                                                                                    "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
+                                                                                   "current_step"   : self.total_current_new_object,
+                                                                                   "total_steps"    : self.total_new_objects,
                                                                                    "seed_increment" : self.seed_increment,
                                                                                    "start_event"    : False}))
                         else:
@@ -864,6 +856,8 @@ class PowerLoopPoint(widget.OWWidget):
                                                                 additional_parameters={"energy_value"   : self.current_energy_value,
                                                                                        "energy_step"    : energy_binning.energy_step,
                                                                                        "power_step"     : -1 if self.current_power_step is None else self.current_power_step,
+                                                                                       "current_step"   : self.total_current_new_object,
+                                                                                       "total_steps"    : self.total_new_objects,
                                                                                        "seed_increment" : self.seed_increment,
                                                                                        "start_event"    : False}))
                             else:
