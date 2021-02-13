@@ -137,6 +137,7 @@ class PowerPlotXY(AutomaticElement):
     filter_cval = Setting(0.0)
     filter_spline_order = Setting(2)
     masking_level = Setting(1e-3)
+    scaling_factor = Setting(1.0)
 
     cumulated_ticket=None
     plotted_ticket   = None
@@ -354,6 +355,7 @@ class PowerPlotXY(AutomaticElement):
         gui.separator(post_box)
 
         oasysgui.lineEdit(post_box, self, "masking_level", "Mask if < factor of max value", labelWidth=250,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(post_box, self, "scaling_factor", "Scaling factor", labelWidth=250,  valueType=float, orientation="horizontal")
 
         self.set_Filter()
 
@@ -627,6 +629,9 @@ class PowerPlotXY(AutomaticElement):
     def smoothPlot(self):
         if not self.plotted_ticket is None:
             try:
+                congruence.checkPositiveNumber(self.masking_level, "Masking Level")
+                congruence.checkStrictlyPositiveNumber(self.scaling_factor, "Scaling Factor")
+
                 if self.filter==0 or 2<=self.filter<=5:
                     congruence.checkStrictlyPositiveNumber(self.filter_sigma_h, "Sigma/Size H")
                     congruence.checkStrictlyPositiveNumber(self.filter_sigma_v, "Sigma/Size V")
@@ -637,7 +642,7 @@ class PowerPlotXY(AutomaticElement):
 
                 mask = numpy.where(self.plotted_ticket["histogram"] <= self.plotted_ticket["histogram"].max()*self.masking_level)
 
-                histogram = ticket["histogram"]
+                histogram = ticket["histogram"]*self.scaling_factor
                 h_coord = ticket["bin_h_center"]
                 v_coord = ticket["bin_v_center"]
 
