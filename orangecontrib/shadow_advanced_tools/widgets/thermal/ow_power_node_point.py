@@ -65,6 +65,8 @@ from oasys.widgets import congruence
 from oasys.util.oasys_util import TriggerIn, TriggerOut
 from oasys.widgets.exchange import DataExchangeObject
 
+from orangecontrib.shadow.util.shadow_util import ShadowPlot
+
 AUTOBINNING_FILE = "autobinning.dat"
 FILTERS_FILE     = "filters.dat"
 
@@ -124,19 +126,13 @@ class PowerLoopPoint(widget.OWWidget):
 
     send_power_step = Setting(0)
 
-    ''' not used anymore, but...
-    electron_energy = Setting(6.0)
-    K_vertical = Setting(1.943722)
-    K_horizontal = Setting(0.0)
-    period_length = Setting(0.025)
-    number_of_periods = Setting(184)
-    theta_x=Setting(0.0)
-    theta_z=Setting(0.0)
-    '''
     load_file_mode        = Setting(1) # automatic
     skip_rows             = Setting(1)
     autobinning_file_name = Setting(AUTOBINNING_FILE)
     filters_file_name     = Setting(FILTERS_FILE)
+
+    recovery_last_energy_step = -1
+    recovery_file_name = "<Partial Result before Crash>"
 
     current_energy_binning = -1
     current_energy_value = None
@@ -207,8 +203,18 @@ class PowerLoopPoint(widget.OWWidget):
 
         tabs = oasysgui.tabWidget(self.controlArea)
         tab_loop = oasysgui.createTabPage(tabs, "Loop Management")
+        tab_load = oasysgui.createTabPage(tabs, "Settings")
+        tab_recovery = oasysgui.createTabPage(tabs, "Crash Recovery")
 
-        tab_load = oasysgui.createTabPage(tabs, "Input Files")
+        left_box_2 = oasysgui.widgetBox(tab_recovery, "Crash Recovery", addSpace=False, orientation="vertical", width=385, height=560)
+
+        oasysgui.lineEdit(left_box_2, self, "recovery_last_energy_step", "Last Energy Step #", labelWidth=260, valueType=int, orientation="horizontal")
+
+        load_box = oasysgui.widgetBox(left_box_2, "", addSpace=False, orientation="horizontal", height=30)
+        self.le_recovery_file_name = oasysgui.lineEdit(load_box, self, "recovery_file_name", "Extract from File", labelWidth=110, valueType=str, orientation="horizontal")
+        gui.button(load_box, self, "...", callback=self.selectRecoveryFile, width=25)
+
+        gui.button(left_box_2, self, "Restart from Crash", callback=self.restartLoopFromCrash)
 
         left_box_2 = oasysgui.widgetBox(tab_load, "Input Files Management", addSpace=False, orientation="vertical", width=385, height=560)
 
@@ -373,6 +379,24 @@ class PowerLoopPoint(widget.OWWidget):
 
     def selectAutobinningFile(self):
         self.le_autobinning_file_name.setText(oasysgui.selectFileFromDialog(self, self.autobinning_file_name, "Select File", file_extension_filter="Text Files (*.txt *.dat)"))
+
+    def selectRecoveryFile(self):
+        self.le_recovery_file_name.setText(oasysgui.selectFileFromDialog(self, self.recovery_file_name, "Select File", file_extension_filter="HDF5 Files (*.hdf5)"))
+
+        try:
+            plot_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(self.recovery_file_name), mode="r")
+
+            try:
+                self.recovery_last_energy_step = plot_file.get_attribute(attribute_name="current_step", dataset_name="additional_data")
+            except:
+                raise ValueError("Last step non available in this file")
+
+            plot_file.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+            if self.IS_DEVELOP: raise e
+
 
     def selectFiltersFile(self):
         self.le_filters_file_name.setText(oasysgui.selectFileFromDialog(self, self.filters_file_name, "Select File", file_extension_filter="Text Files (*.txt *.dat)"))
@@ -780,6 +804,36 @@ class PowerLoopPoint(widget.OWWidget):
             if self.IS_DEVELOP : raise e
             else: pass
 
+    def restartLoopFromCrash(self):
+        try:
+            if self.energy_binnings is None: raise Exception("Reload Spectrum (and Filters, if present) before restarting the loop")
+
+            self.current_energy_binning   = self.recovery_last_energy_step + 1
+            self.total_current_new_object = self.recovery_last_energy_step + 1
+
+            if self.current_energy_binning < len(self.energy_binnings):
+                energy_binning = self.energy_binnings[self.current_energy_binning]
+
+                self.current_new_object = 1
+                self.calculate_number_of_new_objects()
+                self.current_energy_value = round(energy_binning.energy_value, 8)
+                self.current_power_step = None if energy_binning.power_step is None else (None if self.send_power_step == 0 else round(energy_binning.power_step, 8))
+
+                self.setStatusMessage("Running " + self.get_object_name() + " " + str(self.total_current_new_object) + " of " + str(self.total_new_objects))
+                self.start_button.setEnabled(False)
+                self.text_area.setEnabled(False)
+                self.send("Trigger", TriggerOut(new_object=True,
+                                                additional_parameters={"energy_value": self.current_energy_value,
+                                                                       "energy_step": energy_binning.energy_step,
+                                                                       "power_step": -1 if self.current_power_step is None else self.current_power_step,
+                                                                       "current_step": self.total_current_new_object,
+                                                                       "total_steps": self.total_new_objects,
+                                                                       "seed_increment": self.seed_increment,
+                                                                       "start_event": False}))
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+            if self.IS_DEVELOP: raise e
 
     def restartLoop(self):
         try:

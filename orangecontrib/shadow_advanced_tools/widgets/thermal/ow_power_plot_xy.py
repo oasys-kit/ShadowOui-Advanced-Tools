@@ -812,6 +812,8 @@ class PowerPlotXY(AutomaticElement):
                 self.autosave_file.add_attribute("current_step", self.current_step, dataset_name="additional_data")
                 self.autosave_file.add_attribute("total_steps", self.total_steps, dataset_name="additional_data")
                 self.autosave_file.add_attribute("last_energy_value", self.energy_max, dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_power_value", self.total_power, dataset_name="additional_data")
+                self.autosave_file.add_attribute("cumulated_total_power", self.cumulated_total_power, dataset_name="additional_data")
 
             if self.keep_result == 1:
                 self.cumulated_ticket, last_ticket = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
