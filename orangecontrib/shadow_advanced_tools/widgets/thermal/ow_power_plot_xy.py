@@ -484,23 +484,33 @@ class PowerPlotXY(AutomaticElement):
                         else:
                             raise ValueError("The plots cannot be merged: the should have same dimensions and ranges")
 
-            cumulated_power_plot = numpy.sum(ticket["histogram"])*(ticket["bin_h_center"][1]-ticket["bin_h_center"][0])*(ticket["bin_v_center"][1]-ticket["bin_v_center"][0])
+            try:
+                last_plotted_power  = plot_file.get_attribute("last_plotted_power", dataset_name="additional_data")
+                last_incident_power = plot_file.get_attribute("last_incident_power", dataset_name="additional_data")
+                last_total_power    = plot_file.get_attribute("last_total_power", dataset_name="additional_data")
+                energy_min          = plot_file.get_attribute("last_energy_min", dataset_name="additional_data")
+                energy_max          = plot_file.get_attribute("last_energy_max", dataset_name="additional_data")
+                energy_step         = plot_file.get_attribute("last_energy_step", dataset_name="additional_data")
+            except:
+                last_plotted_power  = numpy.sum(ticket["histogram"]) * (ticket["bin_h_center"][1] - ticket["bin_h_center"][0]) * (ticket["bin_v_center"][1] - ticket["bin_v_center"][0])
+                last_incident_power = 0.0
+                last_total_power    = 0.0
+                energy_min          = 0.0
+                energy_max          = 0.0
+                energy_step         = 0.0
 
             try:
-                energy_min=0.0
-                energy_max=0.0
-                energy_step=0.0
-
-                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.cumulated_power_plot = last_plotted_power
+                self.plot_canvas.cumulated_previous_power_plot = last_incident_power
                 self.plot_canvas.plot_power_density_ticket(ticket,
                                                            ticket["h_label"],
                                                            ticket["v_label"],
-                                                           cumulated_total_power=0.0,
+                                                           cumulated_total_power=last_total_power,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
                                                            energy_step=energy_step)
 
-                self.cumulated_ticket = None
+                self.cumulated_ticket = ticket
                 self.plotted_ticket = ticket
                 self.plotted_ticket_original = ticket.copy()
             except Exception as e:
@@ -813,7 +823,6 @@ class PowerPlotXY(AutomaticElement):
                 self.autosave_file.add_attribute("total_steps", self.total_steps, dataset_name="additional_data")
                 self.autosave_file.add_attribute("last_energy_value", self.energy_max, dataset_name="additional_data")
                 self.autosave_file.add_attribute("last_power_value", self.total_power, dataset_name="additional_data")
-                self.autosave_file.add_attribute("cumulated_total_power", self.cumulated_total_power, dataset_name="additional_data")
 
             if self.keep_result == 1:
                 self.cumulated_ticket, last_ticket = self.plot_canvas.plot_power_density(shadow_beam, var_x, var_y,
@@ -831,7 +840,15 @@ class PowerPlotXY(AutomaticElement):
                                                                                          sigma_x=self.sigma_x,
                                                                                          sigma_y=self.sigma_y,
                                                                                          gamma=self.gamma)
-                self.plotted_ticket = self.cumulated_ticket
+
+                self.autosave_file.add_attribute("last_plotted_power",  self.cumulated_ticket['plotted_power'],  dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_incident_power", self.cumulated_ticket['incident_power'], dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_total_power",    self.cumulated_ticket['total_power'],    dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_energy_min",     self.cumulated_ticket['energy_min'],     dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_energy_max",     self.cumulated_ticket['energy_max'],     dataset_name="additional_data")
+                self.autosave_file.add_attribute("last_energy_step",    self.cumulated_ticket['energy_step'],    dataset_name="additional_data")
+
+                self.plotted_ticket          = self.cumulated_ticket
                 self.plotted_ticket_original = self.plotted_ticket.copy()
 
                 if self.autosave == 1:

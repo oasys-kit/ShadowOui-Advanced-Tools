@@ -447,6 +447,14 @@ class PowerPlotXYWidget(QWidget):
             ticket['h_label'] = var_x
             ticket['v_label'] = var_y
 
+            # data for reload of the file
+            ticket['energy_min']  = energy_min
+            ticket['energy_max']  = energy_max
+            ticket['energy_step'] = energy_step
+            ticket['plotted_power']  = self.cumulated_power_plot
+            ticket['incident_power'] = self.cumulated_previous_power_plot
+            ticket['total_power']    = cumulated_total_power
+
             self.plot_data2D(histogram, xx, yy, title, var_x, var_y)
 
     def get_label(self, var):
