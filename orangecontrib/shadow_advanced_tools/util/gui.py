@@ -419,6 +419,17 @@ class PowerPlotXYWidget(QWidget):
             ticket['nrays']     += ticket_to_add['nrays']
             ticket['good_rays'] += ticket_to_add['good_rays']
 
+        ticket['h_label'] = var_x
+        ticket['v_label'] = var_y
+
+        # data for reload of the file
+        ticket['energy_min'] = energy_min
+        ticket['energy_max'] = energy_max
+        ticket['energy_step'] = energy_step
+        ticket['plotted_power'] = self.cumulated_power_plot
+        ticket['incident_power'] = self.cumulated_previous_power_plot
+        ticket['total_power'] = cumulated_total_power
+
         self.plot_power_density_ticket(ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image)
 
         if not ticket_to_add is None:
@@ -443,17 +454,6 @@ class PowerPlotXYWidget(QWidget):
 
             if not isinstance(var_x, str): var_x = self.get_label(var_x)
             if not isinstance(var_y, str): var_y = self.get_label(var_y)
-
-            ticket['h_label'] = var_x
-            ticket['v_label'] = var_y
-
-            # data for reload of the file
-            ticket['energy_min']  = energy_min
-            ticket['energy_max']  = energy_max
-            ticket['energy_step'] = energy_step
-            ticket['plotted_power']  = self.cumulated_power_plot
-            ticket['incident_power'] = self.cumulated_previous_power_plot
-            ticket['total_power']    = cumulated_total_power
 
             self.plot_data2D(histogram, xx, yy, title, var_x, var_y)
 
