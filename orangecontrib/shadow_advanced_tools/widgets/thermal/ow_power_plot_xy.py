@@ -45,7 +45,7 @@
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # #########################################################################
 
-import os, sys
+import os, sys, copy
 import time
 import numpy
 import scipy.ndimage.filters as filters
@@ -136,8 +136,14 @@ class PowerPlotXY(AutomaticElement):
     filter_mode = Setting(0)
     filter_cval = Setting(0.0)
     filter_spline_order = Setting(2)
-    masking_level = Setting(1e-3)
     scaling_factor = Setting(1.0)
+
+    masking = Setting(0)
+    masking_type = Setting(0)
+    masking_level = Setting(1e-3)
+    masking_width = Setting(0.0)
+    masking_height = Setting(0.0)
+    masking_diameter = Setting(0.0)
 
     cumulated_ticket=None
     plotted_ticket   = None
@@ -296,7 +302,7 @@ class PowerPlotXY(AutomaticElement):
 
         # post porcessing
 
-        post_box = oasysgui.widgetBox(tab_post, "Post Processing Setting", addSpace=False, orientation="vertical", height=500)
+        post_box = oasysgui.widgetBox(tab_post, "Post Processing Setting", addSpace=False, orientation="vertical", height=530)
 
         post_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=25)
         self.le_loaded_plot_file_name = oasysgui.lineEdit(post_box_1, self, "loaded_plot_file_name", "Loaded File", labelWidth=100,  valueType=str, orientation="horizontal")
@@ -305,21 +311,18 @@ class PowerPlotXY(AutomaticElement):
         gui.separator(post_box)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical")
-        gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=35)
-        gui.separator(button_box)
-        gui.button(button_box, self, "Invert", callback=self.invertPlot, height=35)
-
-        gui.separator(post_box)
+        gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25)
+        gui.button(button_box, self, "Invert", callback=self.invertPlot, height=25)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
-        gui.button(button_box, self, "Rebin Plot", callback=self.rebinPlot, height=35)
+        gui.button(button_box, self, "Rebin Plot", callback=self.rebinPlot, height=25)
 
-        post_box_0 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=60)
-        oasysgui.lineEdit(post_box_0, self, "new_nbins_h", "Nr. Bins H", labelWidth=200,  valueType=int, orientation="horizontal")
-        oasysgui.lineEdit(post_box_0, self, "new_nbins_v", "Nr. Bins V", labelWidth=200,  valueType=int, orientation="horizontal")
+        post_box_0 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=30)
+        oasysgui.lineEdit(post_box_0, self, "new_nbins_h", "Nr. Bins H x V", labelWidth=150,  valueType=int, orientation="horizontal")
+        oasysgui.lineEdit(post_box_0, self, "new_nbins_v", "x", labelWidth=10,  valueType=int, orientation="horizontal")
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
-        gui.button(button_box, self, "Smooth Plot", callback=self.smoothPlot, height=35)
+        gui.button(button_box, self, "Smooth Plot", callback=self.smoothPlot, height=25)
 
         gui.separator(post_box)
 
@@ -352,12 +355,33 @@ class PowerPlotXY(AutomaticElement):
 
         oasysgui.lineEdit(self.post_box_3, self, "filter_spline_order", "Spline Order", labelWidth=250,  valueType=int, orientation="horizontal")
 
-        gui.separator(post_box)
-
-        oasysgui.lineEdit(post_box, self, "masking_level", "Mask if < factor of max value", labelWidth=250,  valueType=float, orientation="horizontal")
         oasysgui.lineEdit(post_box, self, "scaling_factor", "Scaling factor", labelWidth=250,  valueType=float, orientation="horizontal")
 
         self.set_Filter()
+
+        gui.separator(post_box)
+
+        button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
+        gui.button(button_box, self, "Mask", callback=self.maskPlot, height=25)
+
+        gui.comboBox(post_box, self, "masking", label="Mask", labelWidth=200,
+                     items=["Level", "Rectangular", "Circular"], sendSelectedValue=False, orientation="horizontal", callback=self.set_Masking)
+
+        gui.comboBox(post_box, self, "masking_type", label="Mask Type", labelWidth=100,
+                     items=["Aperture or < Level", "Obstruction or > Level"], sendSelectedValue=False, orientation="horizontal")
+
+        self.mask_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
+        self.mask_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
+        self.mask_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
+
+        oasysgui.lineEdit(self.mask_box_1, self, "masking_level", "Mask Level (W/mm\u00B2)", labelWidth=250,  valueType=float, orientation="horizontal")
+
+        oasysgui.lineEdit(self.mask_box_2, self, "masking_width", "Mask Width ", labelWidth=250,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.mask_box_2, self, "masking_height", "Mask Height", labelWidth=250,  valueType=float, orientation="horizontal")
+
+        oasysgui.lineEdit(self.mask_box_3, self, "masking_diameter", "Mask Diameter ", labelWidth=250,  valueType=float, orientation="horizontal")
+
+        self.set_Masking()
 
         self.main_tabs = oasysgui.tabWidget(self.mainArea)
         plot_tab = oasysgui.createTabPage(self.main_tabs, "Plots")
@@ -441,6 +465,11 @@ class PowerPlotXY(AutomaticElement):
         self.post_box_4.setVisible(self.filter==6)
 
         if self.filter==0 or self.filter==2: self.set_FilterMode()
+
+    def set_Masking(self):
+        self.mask_box_1.setVisible(self.masking==0)
+        self.mask_box_2.setVisible(self.masking==1)
+        self.mask_box_3.setVisible(self.masking==2)
 
     def set_FilterMode(self):
         self.le_filter_cval.setEnabled(self.filter_mode==1)
@@ -529,9 +558,14 @@ class PowerPlotXY(AutomaticElement):
             cumulated_power_plot = numpy.sum(ticket["histogram"])*(ticket["bin_h_center"][1]-ticket["bin_h_center"][0])*(ticket["bin_v_center"][1]-ticket["bin_v_center"][0])
 
             try:
-                energy_min=0.0
-                energy_max=0.0
-                energy_step=0.0
+                try:
+                    energy_min  = ticket["energy_min"]
+                    energy_max  = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min  = 0.0
+                    energy_max  = 0.0
+                    energy_step = 0.0
 
                 self.plot_canvas.cumulated_power_plot = cumulated_power_plot
                 self.plot_canvas.plot_power_density_ticket(ticket,
@@ -572,9 +606,14 @@ class PowerPlotXY(AutomaticElement):
 
                 cumulated_power_plot = numpy.sum(histogram)*pixel_area
 
-                energy_min = 0.0
-                energy_max = 0.0
-                energy_step = 0.0
+                try:
+                    energy_min  = ticket["energy_min"]
+                    energy_max  = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min  = 0.0
+                    energy_max  = 0.0
+                    energy_step = 0.0
 
                 self.plot_canvas.cumulated_power_plot = cumulated_power_plot
                 self.plot_canvas.plot_power_density_ticket(ticket,
@@ -617,9 +656,92 @@ class PowerPlotXY(AutomaticElement):
 
                 cumulated_power_plot = numpy.sum(histogram)*pixel_area
 
-                energy_min = 0.0
-                energy_max = 0.0
-                energy_step = 0.0
+                try:
+                    energy_min  = ticket["energy_min"]
+                    energy_max  = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min  = 0.0
+                    energy_max  = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def maskPlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                if self.masking == 0:
+                    congruence.checkPositiveNumber(self.masking_level, "Masking Level")
+                if self.masking == 1:
+                    congruence.checkPositiveNumber(self.masking_width, "Masking Width")
+                    congruence.checkPositiveNumber(self.masking_height, "Masking height")
+                if self.masking == 2:
+                    congruence.checkPositiveNumber(self.masking_diameter, "Masking Radius")
+
+                ticket = copy.deepcopy(self.plotted_ticket)
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                if self.masking == 0:
+                    if self.masking_type == 0:
+                        mask = numpy.where(histogram <= self.masking_level)
+                    else:
+                        mask = numpy.where(histogram >= self.masking_level)
+                    histogram[mask] = 0.0
+                elif self.masking == 1:
+                    if self.masking_type == 0:
+                        mask_h = numpy.where(numpy.logical_or(h_coord < -self.masking_width / 2, h_coord > self.masking_width / 2))
+                        mask_v = numpy.where(numpy.logical_or(v_coord < -self.masking_height / 2, v_coord > self.masking_height / 2))
+
+                        histogram[mask_h, :] = 0.0
+                        histogram[:, mask_v] = 0.0
+                    else:
+                        mask_h = numpy.where(numpy.logical_and(h_coord >= -self.masking_width / 2, h_coord <= self.masking_width / 2))
+                        mask_v = numpy.where(numpy.logical_and(v_coord >= -self.masking_height / 2, v_coord <= self.masking_height / 2))
+
+                        histogram[numpy.meshgrid(mask_h, mask_v)]  = 0.0
+                elif self.masking == 2:
+                    h, v = numpy.meshgrid(h_coord, v_coord)
+                    r = numpy.sqrt(h**2 + v**2)
+
+                    if self.masking_type == 0: mask = r > self.masking_diameter*0.5
+                    else:                      mask = r <= self.masking_diameter*0.5
+
+                    histogram[mask] = 0.0
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                ticket["histogram"] = histogram
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(ticket["histogram"]) * pixel_area
+
+                try:
+                    energy_min  = ticket["energy_min"]
+                    energy_max  = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min  = 0.0
+                    energy_max  = 0.0
+                    energy_step = 0.0
 
                 self.plot_canvas.cumulated_power_plot = cumulated_power_plot
                 self.plot_canvas.plot_power_density_ticket(ticket,
@@ -639,7 +761,6 @@ class PowerPlotXY(AutomaticElement):
     def smoothPlot(self):
         if not self.plotted_ticket is None:
             try:
-                congruence.checkPositiveNumber(self.masking_level, "Masking Level")
                 congruence.checkStrictlyPositiveNumber(self.scaling_factor, "Scaling Factor")
 
                 if self.filter==0 or 2<=self.filter<=5:
@@ -649,8 +770,6 @@ class PowerPlotXY(AutomaticElement):
                 if self.filter == 1: congruence.checkStrictlyPositiveNumber(self.filter_spline_order, "Spline Order")
 
                 ticket = self.plotted_ticket.copy()
-
-                mask = numpy.where(self.plotted_ticket["histogram"] <= self.plotted_ticket["histogram"].max()*self.masking_level)
 
                 histogram = ticket["histogram"]*self.scaling_factor
                 h_coord = ticket["bin_h_center"]
@@ -676,8 +795,6 @@ class PowerPlotXY(AutomaticElement):
                     histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_uniform(numpy.fft.fft2(histogram), size=(self.filter_sigma_h, self.filter_sigma_v))))
                 elif self.filter == 6:
                     histogram = self.apply_fill_holes(histogram)
-
-                histogram[mask] = 0.0
 
                 norm /= histogram.sum()
 
