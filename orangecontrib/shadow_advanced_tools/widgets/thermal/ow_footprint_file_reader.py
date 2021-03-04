@@ -139,7 +139,10 @@ class FootprintFileReader(oasyswidget.OWWidget):
                     total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
 
                     additional_parameters["total_power"]        = total_power
+                    additional_parameters["current_step"]       = self.input_beam.scanned_variable_data.get_additional_parameter("current_step")
+                    additional_parameters["total_steps"]        = self.input_beam.scanned_variable_data.get_additional_parameter("total_steps")
                     additional_parameters["photon_energy_step"] = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
+
 
                 additional_parameters["is_footprint"] = True
 
