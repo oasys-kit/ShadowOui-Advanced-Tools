@@ -51,9 +51,9 @@ from scipy.signal import convolve2d
 
 from silx.gui.plot import Plot2D
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+from PyQt5.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QDialogButtonBox
 from PyQt5.QtGui import QPixmap, QPalette, QColor, QFont
-from PyQt5 import QtWidgets
+from PyQt5.QtCore import QSettings
 
 import orangecanvas.resources as resources
 from orangewidget import gui
@@ -875,7 +875,7 @@ class HybridUndulator(GenericElement):
             write_begin_file = 1
 
             if sys.platform == 'linux':
-                QtWidgets.QMessageBox.warning(self, "Warning", "Debug Mode is not yet available for sources in Linux platforms", QtWidgets.QMessageBox.Ok)
+                QMessageBox.warning(self, "Warning", "Debug Mode is not yet available for sources in Linux platforms", QMessageBox.Ok)
             else:
                 write_start_file = 1
                 write_end_file = 1
@@ -973,7 +973,7 @@ class HybridUndulator(GenericElement):
                 else:
                     raise ValueError("Syned data not correct")
             except Exception as exception:
-                QtWidgets.QMessageBox.critical(self, "Error", str(exception), QtWidgets.QMessageBox.Ok)
+                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
 
     def receive_specific_syned_data(self, data):
         raise NotImplementedError()
@@ -1160,11 +1160,84 @@ class HybridUndulator(GenericElement):
 
             self.send("Beam", beam_out)
         except Exception as exception:
-            QtWidgets.QMessageBox.critical(self, "Error", str(exception), QtWidgets.QMessageBox.Ok)
+            QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
 
             if self.IS_DEVELOP: raise exception
 
         self.progressBarFinished()
+
+    def initializeTabs(self):
+        current_tab = self.tabs.currentIndex()
+
+        size = len(self.tab)
+        indexes = range(0, size)
+        for index in indexes:
+            self.tabs.removeTab(size - 1 - index)
+
+        show_effective_source_size = QSettings().value("output/show-effective-source-size", 0, int) == 1
+
+        titles = self.getTitles()
+
+        if show_effective_source_size:
+            self.tab = [oasysgui.createTabPage(self.tabs, titles[0]),
+                        oasysgui.createTabPage(self.tabs, titles[1]),
+                        oasysgui.createTabPage(self.tabs, titles[2]),
+                        oasysgui.createTabPage(self.tabs, titles[3]),
+                        oasysgui.createTabPage(self.tabs, titles[4]),
+                        oasysgui.createTabPage(self.tabs, titles[5]),
+                        ]
+
+            self.plot_canvas = [None, None, None, None, None, None]
+        else:
+            self.tab = [oasysgui.createTabPage(self.tabs, titles[0]),
+                        oasysgui.createTabPage(self.tabs, titles[1]),
+                        oasysgui.createTabPage(self.tabs, titles[2]),
+                        oasysgui.createTabPage(self.tabs, titles[3]),
+                        oasysgui.createTabPage(self.tabs, titles[4]),
+                        ]
+
+            self.plot_canvas = [None, None, None, None, None]
+
+        for tab in self.tab:
+            tab.setFixedHeight(self.IMAGE_HEIGHT)
+            tab.setFixedWidth(self.IMAGE_WIDTH)
+
+        self.tabs.setCurrentIndex(min(current_tab, len(self.tab) - 1))
+
+    def isFootprintEnabled(self):
+        return False
+
+    def enableFootprint(self, enabled=False):
+        pass
+
+    def plot_results(self, beam_out, footprint_beam=None, progressBarValue=80):
+        show_effective_source_size = QSettings().value("output/show-effective-source-size", 0, int) == 1
+
+        if show_effective_source_size:
+            if len(self.tab)==5: self.initializeTabs()
+        else:
+            if len(self.tab)==6: self.initializeTabs()
+
+        super().plot_results(beam_out, footprint_beam, progressBarValue)
+
+        if show_effective_source_size and not self.view_type == 2:
+            effective_source_size_beam = beam_out.duplicate(history=False)
+            effective_source_size_beam._beam.retrace(0)
+
+            variables = self.getVariablestoPlot()
+            titles = self.getTitles()
+            xtitles = self.getXTitles()
+            ytitles = self.getYTitles()
+            xums = self.getXUM()
+            yums = self.getYUM()
+
+            if self.view_type == 1:
+                self.plot_xy_fast(effective_source_size_beam, 100,  variables[0][0], variables[0][1], plot_canvas_index=5, title=titles[0], xtitle=xtitles[0], ytitle=ytitles[0])
+            elif self.view_type == 0:
+                self.plot_xy(effective_source_size_beam, 100,  variables[0][0], variables[0][1], plot_canvas_index=5, title=titles[0], xtitle=xtitles[0], ytitle=ytitles[0], xum=xums[0], yum=yums[0])
+
+    def getTitles(self):
+        return ["X,Z", "X',Z'", "X,X'", "Z,Z'", "Energy", "Effective Source Size"]
 
     def sendNewBeam(self, trigger):
         self.compute_power = False
