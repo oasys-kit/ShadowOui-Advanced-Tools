@@ -958,12 +958,13 @@ class PowerPlotXY(AutomaticElement):
                                                                                          sigma_y=self.sigma_y,
                                                                                          gamma=self.gamma)
 
-                self.autosave_file.add_attribute("last_plotted_power",  self.cumulated_ticket['plotted_power'],  dataset_name="additional_data")
-                self.autosave_file.add_attribute("last_incident_power", self.cumulated_ticket['incident_power'], dataset_name="additional_data")
-                self.autosave_file.add_attribute("last_total_power",    self.cumulated_ticket['total_power'],    dataset_name="additional_data")
-                self.autosave_file.add_attribute("last_energy_min",     self.cumulated_ticket['energy_min'],     dataset_name="additional_data")
-                self.autosave_file.add_attribute("last_energy_max",     self.cumulated_ticket['energy_max'],     dataset_name="additional_data")
-                self.autosave_file.add_attribute("last_energy_step",    self.cumulated_ticket['energy_step'],    dataset_name="additional_data")
+                if self.autosave == 1:
+                    self.autosave_file.add_attribute("last_plotted_power",  self.cumulated_ticket['plotted_power'],  dataset_name="additional_data")
+                    self.autosave_file.add_attribute("last_incident_power", self.cumulated_ticket['incident_power'], dataset_name="additional_data")
+                    self.autosave_file.add_attribute("last_total_power",    self.cumulated_ticket['total_power'],    dataset_name="additional_data")
+                    self.autosave_file.add_attribute("last_energy_min",     self.cumulated_ticket['energy_min'],     dataset_name="additional_data")
+                    self.autosave_file.add_attribute("last_energy_max",     self.cumulated_ticket['energy_max'],     dataset_name="additional_data")
+                    self.autosave_file.add_attribute("last_energy_step",    self.cumulated_ticket['energy_step'],    dataset_name="additional_data")
 
                 self.plotted_ticket          = self.cumulated_ticket
                 self.plotted_ticket_original = self.plotted_ticket.copy()
