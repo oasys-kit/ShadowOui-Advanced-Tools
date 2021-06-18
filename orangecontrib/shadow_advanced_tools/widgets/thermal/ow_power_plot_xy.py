@@ -68,6 +68,8 @@ from orangecontrib.shadow.util.shadow_util import ShadowCongruence, ShadowPlot
 from orangecontrib.shadow.widgets.gui.ow_automatic_element import AutomaticElement
 from orangecontrib.shadow_advanced_tools.util.gui import PowerPlotXYWidget
 
+import scipy.constants as codata
+
 class PowerPlotXY(AutomaticElement):
 
     name = "Power Plot XY - Undulator"
@@ -159,6 +161,8 @@ class PowerPlotXY(AutomaticElement):
 
     view_type=Setting(1)
 
+    cumulated_quantity = Setting(0)
+
     autosave_file = None
 
     def __init__(self):
@@ -195,9 +199,19 @@ class PowerPlotXY(AutomaticElement):
 
         self.set_ImagePlane()
 
-        general_box = oasysgui.widgetBox(tab_set, "Variables Settings", addSpace=True, orientation="vertical", height=350)
+        general_box = oasysgui.widgetBox(tab_set, "Variables Settings", addSpace=True, orientation="vertical", height=395)
 
-        self.x_column = gui.comboBox(general_box, self, "x_column_index", label="X Column",labelWidth=70,
+        self.cb_cumulated_quantity = gui.comboBox(general_box, self, "cumulated_quantity", label="Cumulated Quantity", labelWidth=250,
+                                    items=["Power Density [W/mm\u00b2]", "Intensity [ph/s/mm\u00b2]"],
+                                    sendSelectedValue=False, orientation="horizontal")
+
+        self.cb_rays = gui.comboBox(general_box, self, "rays", label="Rays", labelWidth=250,
+                                    items=["Transmitted", "Absorbed (Lost)", "Absorbed (Still Good)"],
+                                    sendSelectedValue=False, orientation="horizontal")
+
+        gui.separator(general_box, height=10)
+
+        self.x_column = gui.comboBox(general_box, self, "x_column_index", label="X Column", labelWidth=70,
                                      items=["1: X",
                                             "2: Y",
                                             "3: Z",
@@ -209,8 +223,8 @@ class PowerPlotXY(AutomaticElement):
                                             "Set.."],
                                      callback=self.set_XRange, sendSelectedValue=False, orientation="horizontal")
 
-        self.xrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
-        self.xrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
+        self.xrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=70)
+        self.xrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=70)
 
         oasysgui.lineEdit(self.xrange_box, self, "x_range_min", "X min", labelWidth=220, valueType=float, orientation="horizontal")
         oasysgui.lineEdit(self.xrange_box, self, "x_range_max", "X max", labelWidth=220, valueType=float, orientation="horizontal")
@@ -230,17 +244,13 @@ class PowerPlotXY(AutomaticElement):
                                             "Set.."],
                                      callback=self.set_YRange, sendSelectedValue=False, orientation="horizontal")
 
-        self.yrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
-        self.yrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=100)
+        self.yrange_box = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=70)
+        self.yrange_box_empty = oasysgui.widgetBox(general_box, "", addSpace=True, orientation="vertical", height=70)
 
         oasysgui.lineEdit(self.yrange_box, self, "y_range_min", "Y min", labelWidth=220, valueType=float, orientation="horizontal")
         oasysgui.lineEdit(self.yrange_box, self, "y_range_max", "Y max", labelWidth=220, valueType=float, orientation="horizontal")
 
         self.set_YRange()
-
-        self.cb_rays = gui.comboBox(general_box, self, "rays", label="Power", labelWidth=250,
-                                    items=["Transmitted", "Absorbed (Lost)", "Absorbed (Still Good)"],
-                                    sendSelectedValue=False, orientation="horizontal")
 
         autosave_box = oasysgui.widgetBox(tab_gen, "Autosave", addSpace=True, orientation="vertical", height=85)
 
@@ -537,7 +547,8 @@ class PowerPlotXY(AutomaticElement):
                                                            cumulated_total_power=last_total_power,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
-                                                           energy_step=energy_step)
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
 
                 self.cumulated_ticket = ticket
                 self.plotted_ticket = ticket
@@ -574,7 +585,8 @@ class PowerPlotXY(AutomaticElement):
                                                            cumulated_total_power=0.0,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
-                                                           energy_step=energy_step)
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
 
 
                 self.plotted_ticket = ticket
@@ -622,7 +634,8 @@ class PowerPlotXY(AutomaticElement):
                                                            cumulated_total_power=0.0,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
-                                                           energy_step=energy_step)
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
 
                 self.plotted_ticket = ticket
             except Exception as e:
@@ -672,7 +685,8 @@ class PowerPlotXY(AutomaticElement):
                                                            cumulated_total_power=0.0,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
-                                                           energy_step=energy_step)
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
 
                 self.plotted_ticket = ticket
             except Exception as e:
@@ -750,7 +764,8 @@ class PowerPlotXY(AutomaticElement):
                                                            cumulated_total_power=0.0,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
-                                                           energy_step=energy_step)
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
 
                 self.plotted_ticket = ticket
             except Exception as e:
@@ -817,7 +832,8 @@ class PowerPlotXY(AutomaticElement):
                                                            cumulated_total_power=0.0,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
-                                                           energy_step=energy_step)
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
 
                 self.plotted_ticket = ticket
             except Exception as e:
@@ -956,7 +972,8 @@ class PowerPlotXY(AutomaticElement):
                                                                                          center_y=self.center_y,
                                                                                          sigma_x=self.sigma_x,
                                                                                          sigma_y=self.sigma_y,
-                                                                                         gamma=self.gamma)
+                                                                                         gamma=self.gamma,
+                                                                                         cumulated_quantity=self.cumulated_quantity)
 
                 if self.autosave == 1:
                     self.autosave_file.add_attribute("last_plotted_power",  self.cumulated_ticket['plotted_power'],  dataset_name="additional_data")
@@ -1000,7 +1017,8 @@ class PowerPlotXY(AutomaticElement):
                                                                 center_y=self.center_y,
                                                                 sigma_x=self.sigma_x,
                                                                 sigma_y=self.sigma_y,
-                                                                gamma=self.gamma)
+                                                                gamma=self.gamma,
+                                                                cumulated_quantity=self.cumulated_quantity)
 
                 self.cumulated_ticket = None
                 self.plotted_ticket = ticket
@@ -1088,7 +1106,8 @@ class PowerPlotXY(AutomaticElement):
                                                        energy_min=self.energy_min,
                                                        energy_max=self.energy_max,
                                                        energy_step=self.energy_step,
-                                                       show_image=self.view_type==1)
+                                                       show_image=self.view_type==1,
+                                                       cumulated_quantity=self.cumulated_quantity)
 
             self.plotted_ticket_original = self.cumulated_ticket.copy()
 
@@ -1116,18 +1135,22 @@ class PowerPlotXY(AutomaticElement):
             if not input_beam.scanned_variable_data is None and input_beam.scanned_variable_data.has_additional_parameter("total_power"):
                 self.input_beam = input_beam
 
-                self.total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
                 self.current_step = self.input_beam.scanned_variable_data.get_additional_parameter("current_step")
                 self.total_steps = self.input_beam.scanned_variable_data.get_additional_parameter("total_steps")
+                self.energy_step = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
+
+                self.total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
+
+                if self.cumulated_quantity == 1: # Intensity
+                    self.total_power /= (1e3 * self.energy_step * codata.e) # to ph/s
+
+                self.energy_max  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
 
                 if self.energy_min is None:
                     self.energy_min  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
                     self.cumulated_total_power = self.total_power
                 else:
                     self.cumulated_total_power += self.total_power
-
-                self.energy_step = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
-                self.energy_max  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
 
                 if self.input_beam.scanned_variable_data.has_additional_parameter("is_footprint"):
                     if self.input_beam.scanned_variable_data.get_additional_parameter("is_footprint"):

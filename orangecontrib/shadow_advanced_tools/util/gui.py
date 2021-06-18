@@ -73,7 +73,7 @@ class PowerPlotXYWidget(QWidget):
 
         self.setLayout(QVBoxLayout())
 
-    def manage_empty_beam(self, ticket_to_add, nbins_h, nbins_v, xrange, yrange, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image, to_mm):
+    def manage_empty_beam(self, ticket_to_add, nbins_h, nbins_v, xrange, yrange, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image, to_mm, cumulated_quantity=0):
         if not ticket_to_add is None:
             ticket      = copy.deepcopy(ticket_to_add)
             last_ticket = copy.deepcopy(ticket_to_add)
@@ -90,7 +90,7 @@ class PowerPlotXYWidget(QWidget):
             else:
                 raise ValueError("Beam is empty and no range has been specified: Calculation is impossible")
 
-        self.plot_power_density_ticket(ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image)
+        self.plot_power_density_ticket(ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image, cumulated_quantity)
 
         if not ticket_to_add is None:
             return ticket, last_ticket
@@ -98,7 +98,7 @@ class PowerPlotXYWidget(QWidget):
             return ticket, None
 
     def plot_power_density_BM(self, shadow_beam, initial_energy, initial_flux, nbins_interpolation,
-                              var_x, var_y, nbins_h=100, nbins_v=100, xrange=None, yrange=None, nolost=1, to_mm=1.0, show_image=True):
+                              var_x, var_y, nbins_h=100, nbins_v=100, xrange=None, yrange=None, nolost=1, to_mm=1.0, show_image=True, cumulated_quantity=0):
         n_rays = len(shadow_beam._beam.rays[:, 0]) # lost and good!
 
         if n_rays == 0:
@@ -269,7 +269,7 @@ class PowerPlotXYWidget(QWidget):
         self.cumulated_previous_power_plot = total_incident_power_shadow
         self.cumulated_power_plot = total_final_power_shadow
 
-        self.plot_power_density_ticket(ticket, var_x, var_y, total_initial_power_shadow, energy_min, energy_max, energy_step, show_image)
+        self.plot_power_density_ticket(ticket, var_x, var_y, total_initial_power_shadow, energy_min, energy_max, energy_step, show_image, cumulated_quantity)
 
         return ticket
 
@@ -282,7 +282,8 @@ class PowerPlotXYWidget(QWidget):
                            center_y = 0.0,
                            sigma_x=1.0,
                            sigma_y=1.0,
-                           gamma=1.0):
+                           gamma=1.0,
+                           cumulated_quantity=0):
 
         n_rays = len(shadow_beam._beam.rays[:, 0]) # lost and good!
 
@@ -430,24 +431,31 @@ class PowerPlotXYWidget(QWidget):
         ticket['incident_power'] = self.cumulated_previous_power_plot
         ticket['total_power'] = cumulated_total_power
 
-        self.plot_power_density_ticket(ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image)
+        self.plot_power_density_ticket(ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image, cumulated_quantity)
 
         if not ticket_to_add is None:
             return ticket, last_ticket
         else:
             return ticket, None
 
-    def plot_power_density_ticket(self, ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image=True):
+    def plot_power_density_ticket(self, ticket, var_x, var_y, cumulated_total_power, energy_min, energy_max, energy_step, show_image=True, cumulated_quantity=0):
         if show_image:
             histogram = ticket['histogram']
 
             average_power_density = numpy.average(histogram[numpy.where(histogram > 0.0)])
 
-            title = "Power Density [W/mm\u00b2] from " + str(round(energy_min, 2)) + " to " + str(round(energy_max+energy_step, 2)) + " [eV], Current Step: " + str(round(energy_step, 2)) + "\n" + \
-                    "Power [W]: Plotted=" + str(round(self.cumulated_power_plot, 3)) + \
-                    ", Incident=" + str(round(self.cumulated_previous_power_plot, 3)) + \
-                    ", Total=" + str(round(cumulated_total_power, 3)) + \
-                    ", <P.D.>=" + str(round(average_power_density, 3)) + " W/mm\u00b2"
+            if cumulated_quantity == 0: # Power density
+                title = "Power Density [W/mm\u00b2] from " + str(round(energy_min, 2)) + " to " + str(round(energy_max+energy_step, 2)) + " [eV], Current Step: " + str(round(energy_step, 2)) + "\n" + \
+                        "Power [W]: Plot=" + str(round(self.cumulated_power_plot, 3)) + \
+                        ", Incid.=" + str(round(self.cumulated_previous_power_plot, 3)) + \
+                        ", Tot.=" + str(round(cumulated_total_power, 3)) + \
+                        ", <PD>=" + str(round(average_power_density, 3)) + " W/mm\u00b2"
+            elif cumulated_quantity == 1: # Intensity
+                title = "Intensity [ph/s/mm\u00b2] from " + str(round(energy_min, 2)) + " to " + str(round(energy_max+energy_step, 2)) + " [eV], Current Step: " + str(round(energy_step, 2)) + "\n" + \
+                        "Flux [ph/s]: Plot=" + "{:.1e}".format(self.cumulated_power_plot) + \
+                        ", Incid.=" + "{:.1e}".format(self.cumulated_previous_power_plot) + \
+                        ", Tot.=" + "{:.1e}".format(cumulated_total_power) + \
+                        ", <I>=" + "{:.2e}".format(average_power_density) + " ph/s/mm\u00b2"
 
             xx = ticket['bin_h_center']
             yy = ticket['bin_v_center']
