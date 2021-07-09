@@ -51,9 +51,15 @@ import numpy
 import scipy.ndimage.filters as filters
 import scipy.ndimage.interpolation as interpolation
 import scipy.ndimage.fourier as fourier
+from scipy.optimize import least_squares
+from numpy.polynomial.polynomial import polyval2d
 
-from PyQt5.QtWidgets import QMessageBox, QFileDialog, QInputDialog
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtWidgets import QMessageBox, QFileDialog, QInputDialog, QDialog, \
+    QLabel, QVBoxLayout, QDialogButtonBox, QSizePolicy
+from PyQt5.QtGui import QTextCursor, QPixmap
+from PyQt5.QtCore import Qt
+
+import orangecanvas.resources as resources
 
 from orangewidget import gui
 from orangewidget.settings import Setting
@@ -126,11 +132,15 @@ class PowerPlotXY(AutomaticElement):
     sigma_y = Setting(0.0)
     gamma = Setting(0.0)
 
-
     loaded_plot_file_name = "<load hdf5 file>"
 
     new_nbins_h = Setting(25)
     new_nbins_v = Setting(25)
+
+    new_range_h_from = Setting(0.0)
+    new_range_h_to   = Setting(0.0)
+    new_range_v_from = Setting(0.0)
+    new_range_v_to   = Setting(0.0)
 
     filter = Setting(3)
     filter_sigma_h = Setting(1.0)
@@ -310,26 +320,71 @@ class PowerPlotXY(AutomaticElement):
 
         self.set_kind_of_calculation()
 
-        # post porcessing
+        # post processing
 
-        post_box = oasysgui.widgetBox(tab_post, "Post Processing Setting", addSpace=False, orientation="vertical", height=530)
+        gui.separator(tab_post)
 
-        post_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=25)
+        post_box_1 = oasysgui.widgetBox(tab_post, "", addSpace=False, orientation="horizontal", height=25)
         self.le_loaded_plot_file_name = oasysgui.lineEdit(post_box_1, self, "loaded_plot_file_name", "Loaded File", labelWidth=100,  valueType=str, orientation="horizontal")
         gui.button(post_box_1, self, "...", callback=self.selectPlotFile)
 
-        gui.separator(post_box)
+        tabs_post = oasysgui.tabWidget(tab_post)
+        tabs_post.setFixedWidth(self.CONTROL_AREA_WIDTH-20)
+
+        # graph tab
+        tab_post_basic  = oasysgui.createTabPage(tabs_post, "Basic")
+        tab_post_smooth = oasysgui.createTabPage(tabs_post, "Smoothing")
+        tab_post_fit    = oasysgui.createTabPage(tabs_post, "Fit")
+
+        post_box = oasysgui.widgetBox(tab_post_basic, "Basic Post Processing Setting", addSpace=False, orientation="vertical", height=460)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical")
-        gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25)
+        button = gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25)
+        gui.separator(button_box, height=10)
         gui.button(button_box, self, "Invert", callback=self.invertPlot, height=25)
+        gui.button(button_box, self, "Rescale Plot", callback=self.rescalePlot, height=25)
+
+        oasysgui.lineEdit(post_box, self, "scaling_factor", "Scaling factor", labelWidth=250,  valueType=float, orientation="horizontal")
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
         gui.button(button_box, self, "Rebin Plot", callback=self.rebinPlot, height=25)
 
-        post_box_0 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=30)
+        post_box_0 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=25)
         oasysgui.lineEdit(post_box_0, self, "new_nbins_h", "Nr. Bins H x V", labelWidth=150,  valueType=int, orientation="horizontal")
         oasysgui.lineEdit(post_box_0, self, "new_nbins_v", "x", labelWidth=10,  valueType=int, orientation="horizontal")
+
+        button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
+        gui.button(button_box, self, "Cut Plot", callback=self.cutPlot, height=25)
+        post_box_0 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=25)
+        oasysgui.lineEdit(post_box_0, self, "new_range_h_from", "New Range H (from, to)", labelWidth=150,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(post_box_0, self, "new_range_h_to", "x", labelWidth=10,  valueType=float, orientation="horizontal")
+        post_box_0 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal", height=25)
+        oasysgui.lineEdit(post_box_0, self, "new_range_v_from", "New Range V (from, to)", labelWidth=150,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(post_box_0, self, "new_range_v_to", "x", labelWidth=10,  valueType=float, orientation="horizontal")
+
+        gui.separator(post_box)
+
+        button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
+        gui.button(button_box, self, "Mask", callback=self.maskPlot, height=25)
+
+        gui.comboBox(post_box, self, "masking", label="Mask", labelWidth=200,
+                     items=["Level", "Rectangular", "Circular"], sendSelectedValue=False, orientation="horizontal", callback=self.set_Masking)
+
+        gui.comboBox(post_box, self, "masking_type", label="Mask Type", labelWidth=100,
+                     items=["Aperture or < Level", "Obstruction or > Level"], sendSelectedValue=False, orientation="horizontal")
+
+        self.mask_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
+        self.mask_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
+        self.mask_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
+
+        oasysgui.lineEdit(self.mask_box_1, self, "masking_level", "Mask Level (W/mm\u00B2)", labelWidth=250,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.mask_box_2, self, "masking_width", "Mask Width ", labelWidth=250,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.mask_box_2, self, "masking_height", "Mask Height", labelWidth=250,  valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.mask_box_3, self, "masking_diameter", "Mask Diameter ", labelWidth=250,  valueType=float, orientation="horizontal")
+
+        self.set_Masking()
+
+        post_box = oasysgui.widgetBox(tab_post_smooth, "Smoothing Setting", addSpace=False, orientation="vertical", height=220)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
         gui.button(button_box, self, "Smooth Plot", callback=self.smoothPlot, height=25)
@@ -365,33 +420,15 @@ class PowerPlotXY(AutomaticElement):
 
         oasysgui.lineEdit(self.post_box_3, self, "filter_spline_order", "Spline Order", labelWidth=250,  valueType=int, orientation="horizontal")
 
-        oasysgui.lineEdit(post_box, self, "scaling_factor", "Scaling factor", labelWidth=250,  valueType=float, orientation="horizontal")
-
         self.set_Filter()
 
-        gui.separator(post_box)
+        post_box = oasysgui.widgetBox(tab_post_fit, "Fit Setting", addSpace=False, orientation="vertical", height=460)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
-        gui.button(button_box, self, "Mask", callback=self.maskPlot, height=25)
+        gui.button(button_box, self, "Show Fit Formulas Plot", callback=self.showFitFormulas, height=25)
 
-        gui.comboBox(post_box, self, "masking", label="Mask", labelWidth=200,
-                     items=["Level", "Rectangular", "Circular"], sendSelectedValue=False, orientation="horizontal", callback=self.set_Masking)
-
-        gui.comboBox(post_box, self, "masking_type", label="Mask Type", labelWidth=100,
-                     items=["Aperture or < Level", "Obstruction or > Level"], sendSelectedValue=False, orientation="horizontal")
-
-        self.mask_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
-        self.mask_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
-        self.mask_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=50)
-
-        oasysgui.lineEdit(self.mask_box_1, self, "masking_level", "Mask Level (W/mm\u00B2)", labelWidth=250,  valueType=float, orientation="horizontal")
-
-        oasysgui.lineEdit(self.mask_box_2, self, "masking_width", "Mask Width ", labelWidth=250,  valueType=float, orientation="horizontal")
-        oasysgui.lineEdit(self.mask_box_2, self, "masking_height", "Mask Height", labelWidth=250,  valueType=float, orientation="horizontal")
-
-        oasysgui.lineEdit(self.mask_box_3, self, "masking_diameter", "Mask Diameter ", labelWidth=250,  valueType=float, orientation="horizontal")
-
-        self.set_Masking()
+        #######################################################
+        # MAIN TAB
 
         self.main_tabs = oasysgui.tabWidget(self.mainArea)
         plot_tab = oasysgui.createTabPage(self.main_tabs, "Plots")
@@ -487,457 +524,53 @@ class PowerPlotXY(AutomaticElement):
     def selectAutosaveFile(self):
         self.le_autosave_file_name.setText(oasysgui.selectFileFromDialog(self, self.autosave_file_name, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)"))
 
-    def selectPlotFile(self):
-        file_name = oasysgui.selectFileFromDialog(self, None, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)")
+    #########################################################
+    # I/O
 
-        if not file_name is None:
-            self.le_loaded_plot_file_name.setText(os.path.basename(os.path.normpath(file_name)))
+    def setBeam(self, input_beam):
+        self.cb_rays.setEnabled(True)
 
-            plot_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(file_name), mode="r")
+        if not input_beam is None:
+            if not input_beam.scanned_variable_data is None and input_beam.scanned_variable_data.has_additional_parameter("total_power"):
+                self.input_beam = input_beam
 
-            ticket = {}
+                self.current_step = self.input_beam.scanned_variable_data.get_additional_parameter("current_step")
+                self.total_steps = self.input_beam.scanned_variable_data.get_additional_parameter("total_steps")
+                self.energy_step = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
 
-            ticket["histogram"], ticket["histogram_h"], ticket["histogram_v"], attributes = plot_file.get_last_plot(dataset_name="power_density")
-            ticket["bin_h_center"], ticket["bin_v_center"], ticket["h_label"], ticket["v_label"] = plot_file.get_coordinates()
-            ticket["intensity"] = attributes["intensity"]
-            ticket["nrays"]     = attributes["total_rays"]
-            ticket["good_rays"] = attributes["good_rays"]
+                self.total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
 
-            if self.plot_canvas is None:
-                self.plot_canvas = PowerPlotXYWidget()
-                self.image_box.layout().addWidget(self.plot_canvas)
-            else:
-                if not self.plotted_ticket is None:
-                    if QMessageBox.question(self, "Load Plot", "Merge with current Plot?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
-                        if ticket["histogram"].shape == self.plotted_ticket["histogram"].shape and \
-                           ticket["bin_h_center"].shape == self.plotted_ticket["bin_h_center"].shape and \
-                           ticket["bin_v_center"].shape == self.plotted_ticket["bin_v_center"].shape and \
-                           ticket["bin_h_center"][0] == self.plotted_ticket["bin_h_center"][0] and \
-                           ticket["bin_h_center"][-1] == self.plotted_ticket["bin_h_center"][-1] and \
-                           ticket["bin_v_center"][0] == self.plotted_ticket["bin_v_center"][0] and \
-                           ticket["bin_v_center"][-1] == self.plotted_ticket["bin_v_center"][-1]:
-                            ticket["histogram"] += self.plotted_ticket["histogram"]
+                if self.cumulated_quantity == 1: # Intensity
+                    self.total_power /= (1e3 * self.energy_step * codata.e) # to ph/s
 
-                            if  QMessageBox.question(self, "Load Plot", "Average with current Plot?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
-                                ticket["histogram"] *= 0.5
-                        else:
-                            raise ValueError("The plots cannot be merged: the should have same dimensions and ranges")
+                self.energy_max  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
 
-            try:
-                last_plotted_power  = plot_file.get_attribute("last_plotted_power", dataset_name="additional_data")
-                last_incident_power = plot_file.get_attribute("last_incident_power", dataset_name="additional_data")
-                last_total_power    = plot_file.get_attribute("last_total_power", dataset_name="additional_data")
-                energy_min          = plot_file.get_attribute("last_energy_min", dataset_name="additional_data")
-                energy_max          = plot_file.get_attribute("last_energy_max", dataset_name="additional_data")
-                energy_step         = plot_file.get_attribute("last_energy_step", dataset_name="additional_data")
-            except:
-                last_plotted_power  = numpy.sum(ticket["histogram"]) * (ticket["bin_h_center"][1] - ticket["bin_h_center"][0]) * (ticket["bin_v_center"][1] - ticket["bin_v_center"][0])
-                last_incident_power = 0.0
-                last_total_power    = 0.0
-                energy_min          = 0.0
-                energy_max          = 0.0
-                energy_step         = 0.0
+                if self.energy_min is None:
+                    self.energy_min  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
+                    self.cumulated_total_power = self.total_power
+                else:
+                    self.cumulated_total_power += self.total_power
 
-            try:
-                self.plot_canvas.cumulated_power_plot = last_plotted_power
-                self.plot_canvas.cumulated_previous_power_plot = last_incident_power
-                self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["h_label"],
-                                                           ticket["v_label"],
-                                                           cumulated_total_power=last_total_power,
-                                                           energy_min=energy_min,
-                                                           energy_max=energy_max,
-                                                           energy_step=energy_step,
-                                                           cumulated_quantity=self.cumulated_quantity)
-
-                self.cumulated_ticket = ticket
-                self.plotted_ticket = ticket
-                self.plotted_ticket_original = ticket.copy()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise e
-
-    def reloadPlot(self):
-        if not self.plotted_ticket_original is None:
-            ticket = self.plotted_ticket_original.copy()
-
-            if self.plot_canvas is None:
-                self.plot_canvas = PowerPlotXYWidget()
-                self.image_box.layout().addWidget(self.plot_canvas)
-
-            cumulated_power_plot = numpy.sum(ticket["histogram"])*(ticket["bin_h_center"][1]-ticket["bin_h_center"][0])*(ticket["bin_v_center"][1]-ticket["bin_v_center"][0])
-
-            try:
-                try:
-                    energy_min  = ticket["energy_min"]
-                    energy_max  = ticket["energy_max"]
-                    energy_step = ticket["energy_step"]
-                except:
-                    energy_min  = 0.0
-                    energy_max  = 0.0
-                    energy_step = 0.0
-
-                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
-                self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["h_label"],
-                                                           ticket["v_label"],
-                                                           cumulated_total_power=0.0,
-                                                           energy_min=energy_min,
-                                                           energy_max=energy_max,
-                                                           energy_step=energy_step,
-                                                           cumulated_quantity=self.cumulated_quantity)
-
-
-                self.plotted_ticket = ticket
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise e
-
-    def invertPlot(self):
-        if not self.plotted_ticket is None:
-            try:
-                ticket = self.plotted_ticket.copy()
-
-                histogram = ticket["histogram"]
-                h_coord = ticket["bin_h_center"]
-                v_coord = ticket["bin_v_center"]
-
-                h_coord, v_coord, histogram = self.invert(h_coord, v_coord, histogram)
-
-                ticket["histogram"] = histogram
-                ticket["bin_h_center"] = h_coord
-                ticket["bin_v_center"] = v_coord
-
-                pixel_area = (h_coord[1]-h_coord[0])*(v_coord[1]-v_coord[0])
-
-                if self.plot_canvas is None:
-                    self.plot_canvas = PowerPlotXYWidget()
-                    self.image_box.layout().addWidget(self.plot_canvas)
-
-                cumulated_power_plot = numpy.sum(histogram)*pixel_area
-
-                try:
-                    energy_min  = ticket["energy_min"]
-                    energy_max  = ticket["energy_max"]
-                    energy_step = ticket["energy_step"]
-                except:
-                    energy_min  = 0.0
-                    energy_max  = 0.0
-                    energy_step = 0.0
-
-                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
-                self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["v_label"],
-                                                           ticket["h_label"],
-                                                           cumulated_total_power=0.0,
-                                                           energy_min=energy_min,
-                                                           energy_max=energy_max,
-                                                           energy_step=energy_step,
-                                                           cumulated_quantity=self.cumulated_quantity)
-
-                self.plotted_ticket = ticket
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise e
-
-    def rebinPlot(self):
-        if not self.plotted_ticket is None:
-            try:
-                congruence.checkStrictlyPositiveNumber(self.new_nbins_h, "Nr. Bins H")
-                congruence.checkStrictlyPositiveNumber(self.new_nbins_v, "Nr. Bins V")
-
-                ticket = self.plotted_ticket.copy()
-
-                histogram = ticket["histogram"]
-                h_coord = ticket["bin_h_center"]
-                v_coord = ticket["bin_v_center"]
-
-                h_coord, v_coord, histogram = self.rebin(h_coord, v_coord, histogram, (int(self.new_nbins_h), int(self.new_nbins_v)))
-
-                ticket["histogram"] = histogram
-                ticket["bin_h_center"] = h_coord
-                ticket["bin_v_center"] = v_coord
-
-                pixel_area = (h_coord[1]-h_coord[0])*(v_coord[1]-v_coord[0])
-
-                if self.plot_canvas is None:
-                    self.plot_canvas = PowerPlotXYWidget()
-                    self.image_box.layout().addWidget(self.plot_canvas)
-
-                cumulated_power_plot = numpy.sum(histogram)*pixel_area
-
-                try:
-                    energy_min  = ticket["energy_min"]
-                    energy_max  = ticket["energy_max"]
-                    energy_step = ticket["energy_step"]
-                except:
-                    energy_min  = 0.0
-                    energy_max  = 0.0
-                    energy_step = 0.0
-
-                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
-                self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["h_label"],
-                                                           ticket["v_label"],
-                                                           cumulated_total_power=0.0,
-                                                           energy_min=energy_min,
-                                                           energy_max=energy_max,
-                                                           energy_step=energy_step,
-                                                           cumulated_quantity=self.cumulated_quantity)
-
-                self.plotted_ticket = ticket
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise e
-
-    def maskPlot(self):
-        if not self.plotted_ticket is None:
-            try:
-                if self.masking == 0:
-                    congruence.checkPositiveNumber(self.masking_level, "Masking Level")
-                if self.masking == 1:
-                    congruence.checkPositiveNumber(self.masking_width, "Masking Width")
-                    congruence.checkPositiveNumber(self.masking_height, "Masking height")
-                if self.masking == 2:
-                    congruence.checkPositiveNumber(self.masking_diameter, "Masking Radius")
-
-                ticket = copy.deepcopy(self.plotted_ticket)
-
-                histogram = ticket["histogram"]
-                h_coord = ticket["bin_h_center"]
-                v_coord = ticket["bin_v_center"]
-
-                if self.masking == 0:
-                    if self.masking_type == 0:
-                        mask = numpy.where(histogram <= self.masking_level)
+                if self.input_beam.scanned_variable_data.has_additional_parameter("is_footprint"):
+                    if self.input_beam.scanned_variable_data.get_additional_parameter("is_footprint"):
+                        self.cb_rays.setEnabled(False)
+                        self.rays = 0 # transmitted, absorbed doesn't make sense since is precalculated by footprint object
                     else:
-                        mask = numpy.where(histogram >= self.masking_level)
-                    histogram[mask] = 0.0
-                elif self.masking == 1:
-                    if self.masking_type == 0:
-                        mask_h = numpy.where(numpy.logical_or(h_coord < -self.masking_width / 2, h_coord > self.masking_width / 2))
-                        mask_v = numpy.where(numpy.logical_or(v_coord < -self.masking_height / 2, v_coord > self.masking_height / 2))
+                        self.cb_rays.setEnabled(True)
 
-                        histogram[mask_h, :] = 0.0
-                        histogram[:, mask_v] = 0.0
-                    else:
-                        mask_h = numpy.where(numpy.logical_and(h_coord >= -self.masking_width / 2, h_coord <= self.masking_width / 2))
-                        mask_v = numpy.where(numpy.logical_and(v_coord >= -self.masking_height / 2, v_coord <= self.masking_height / 2))
+                if ShadowCongruence.checkEmptyBeam(input_beam):
+                    if ShadowCongruence.checkGoodBeam(input_beam):
+                        self.plot_results()
 
-                        histogram[numpy.meshgrid(mask_h, mask_v)]  = 0.0
-                elif self.masking == 2:
-                    h, v = numpy.meshgrid(h_coord, v_coord)
-                    r = numpy.sqrt(h**2 + v**2)
+    def writeStdOut(self, text):
+        cursor = self.shadow_output.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(text)
+        self.shadow_output.setTextCursor(cursor)
+        self.shadow_output.ensureCursorVisible()
 
-                    if self.masking_type == 0: mask = r > self.masking_diameter*0.5
-                    else:                      mask = r <= self.masking_diameter*0.5
-
-                    histogram[mask] = 0.0
-
-                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
-
-                ticket["histogram"] = histogram
-
-                if self.plot_canvas is None:
-                    self.plot_canvas = PowerPlotXYWidget()
-                    self.image_box.layout().addWidget(self.plot_canvas)
-
-                cumulated_power_plot = numpy.sum(ticket["histogram"]) * pixel_area
-
-                try:
-                    energy_min  = ticket["energy_min"]
-                    energy_max  = ticket["energy_max"]
-                    energy_step = ticket["energy_step"]
-                except:
-                    energy_min  = 0.0
-                    energy_max  = 0.0
-                    energy_step = 0.0
-
-                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
-                self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["h_label"],
-                                                           ticket["v_label"],
-                                                           cumulated_total_power=0.0,
-                                                           energy_min=energy_min,
-                                                           energy_max=energy_max,
-                                                           energy_step=energy_step,
-                                                           cumulated_quantity=self.cumulated_quantity)
-
-                self.plotted_ticket = ticket
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise e
-
-    def smoothPlot(self):
-        if not self.plotted_ticket is None:
-            try:
-                congruence.checkStrictlyPositiveNumber(self.scaling_factor, "Scaling Factor")
-
-                if self.filter==0 or 2<=self.filter<=5:
-                    congruence.checkStrictlyPositiveNumber(self.filter_sigma_h, "Sigma/Size H")
-                    congruence.checkStrictlyPositiveNumber(self.filter_sigma_v, "Sigma/Size V")
-
-                if self.filter == 1: congruence.checkStrictlyPositiveNumber(self.filter_spline_order, "Spline Order")
-
-                ticket = self.plotted_ticket.copy()
-
-                histogram = ticket["histogram"]*self.scaling_factor
-                h_coord = ticket["bin_h_center"]
-                v_coord = ticket["bin_v_center"]
-
-                norm = histogram.sum()
-
-                pixel_area = (h_coord[1]-h_coord[0])*(v_coord[1]-v_coord[0])
-
-                filter_mode = self.cb_filter_mode.currentText()
-
-                if self.filter == 0:
-                    histogram = filters.gaussian_filter(histogram, sigma=(self.filter_sigma_h, self.filter_sigma_v), mode=filter_mode, cval=self.filter_cval)
-                elif self.filter == 1:
-                    histogram = interpolation.spline_filter(histogram, order=int(self.filter_spline_order))
-                elif self.filter == 2:
-                    histogram = filters.uniform_filter(histogram, size=(int(self.filter_sigma_h), int(self.filter_sigma_v)), mode=filter_mode, cval=self.filter_cval)
-                elif self.filter == 3:
-                    histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_gaussian(numpy.fft.fft2(histogram), sigma=(self.filter_sigma_h, self.filter_sigma_v))))
-                elif self.filter == 4:
-                    histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_ellipsoid(numpy.fft.fft2(histogram), size=(self.filter_sigma_h, self.filter_sigma_v))))
-                elif self.filter == 5:
-                    histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_uniform(numpy.fft.fft2(histogram), size=(self.filter_sigma_h, self.filter_sigma_v))))
-                elif self.filter == 6:
-                    histogram = self.apply_fill_holes(histogram)
-
-                norm /= histogram.sum()
-
-                ticket["histogram"] = histogram*norm
-                
-                if self.plot_canvas is None:
-                    self.plot_canvas = PowerPlotXYWidget()
-                    self.image_box.layout().addWidget(self.plot_canvas)
-
-                cumulated_power_plot = numpy.sum(ticket["histogram"])*pixel_area
-
-                energy_min=0.0
-                energy_max=0.0
-                energy_step=0.0
-
-                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
-                self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["h_label"],
-                                                           ticket["v_label"],
-                                                           cumulated_total_power=0.0,
-                                                           energy_min=energy_min,
-                                                           energy_max=energy_max,
-                                                           energy_step=energy_step,
-                                                           cumulated_quantity=self.cumulated_quantity)
-
-                self.plotted_ticket = ticket
-            except Exception as e:
-                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise e
-
-    def rebin(self, x, y, z, new_shape):
-        shape = (new_shape[0], z.shape[0] // new_shape[0], new_shape[1], z.shape[1] // new_shape[1])
-
-        return numpy.linspace(x[0], x[-1], new_shape[0]), \
-               numpy.linspace(y[0], y[-1], new_shape[1]),  \
-               z.reshape(shape).mean(-1).mean(1)
-
-    def invert(self, x, y, data):
-        return y, x, data.T
-
-    def apply_fill_holes(self, histogram):
-        from skimage.morphology import reconstruction
-
-        seed = numpy.copy(histogram)
-        seed[1:-1, 1:-1] = histogram.max()
-
-        filled = reconstruction(seed=seed, mask=histogram, method='erosion')
-
-        return filled*(histogram.sum()/filled.sum())
-
-    def save_cumulated_data(self):
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Current Plot", filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
-
-        if not file_name is None and not file_name.strip()=="":
-            format, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", ("Hdf5", "Text", "Ansys", "All"), 3, False)
-
-            if ok and format:
-                if format == "Hdf5" or format == "All":  self.save_cumulated_data_hdf5(file_name)
-                if format == "Text" or format == "All":  self.save_cumulated_data_txt(file_name)
-                if format == "Ansys" or format == "All": self.save_cumulated_data_ansys(file_name)
-
-    def save_cumulated_data_hdf5(self, file_name):
-        if not self.plotted_ticket is None:
-            try:
-                save_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(os.path.splitext(file_name)[0] + ".hdf5"))
-
-                save_file.write_coordinates(self.plotted_ticket)
-                save_file.add_plot_xy(self.plotted_ticket, dataset_name="power_density")
-
-                save_file.close()
-            except Exception as exception:
-                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise exception
-
-    def save_cumulated_data_txt(self, file_name):
-        if not self.plotted_ticket is None:
-            try:
-                save_file = open(os.path.splitext(file_name)[0] + ".dat", "w")
-
-                x_values = self.plotted_ticket["bin_h_center"]
-                y_values = self.plotted_ticket["bin_v_center"]
-                z_values = self.plotted_ticket["histogram"]
-
-                for i in range(len(x_values)):
-                    for j in range(len(y_values)):
-                        row = str(x_values[i]) + " " + str(y_values[j]) + " " + str(z_values[i, j])
-
-                        if i+j > 0: row = "\n" + row
-
-                        save_file.write(row)
-
-                save_file.flush()
-                save_file.close()
-            except Exception as exception:
-                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise exception
-
-    def save_cumulated_data_ansys(self, file_name):
-        if not self.plotted_ticket is None:
-            try:
-                column, ok = QInputDialog.getItem(self, "Ansys File", "Empty column in Ansys axes system", ("x", "y", "z"), 2, False)
-
-                if ok and column:
-                    save_file = open(os.path.splitext(file_name)[0] + ".csv", "w")
-
-                    x_values = self.plotted_ticket["bin_h_center"]
-                    y_values = self.plotted_ticket["bin_v_center"]
-                    z_values = self.plotted_ticket["histogram"]
-
-                    for i in range(x_values.shape[0]):
-                        for j in range(y_values.shape[0]):
-                            if column == "x":   row = "0.0,"                              + str(x_values[i]) + ","  + str(y_values[j]) + "," + str(z_values[i, j])
-                            elif column == "y": row = str(x_values[i])                    + ",0.0,"                 + str(y_values[j]) + "," + str(z_values[i, j])
-                            elif column == "z": row = str(x_values[i]) + ","              + str(y_values[j])        + ",0.0,"                + str(z_values[i, j])
-
-                            if i+j > 0: row = "\n" + row
-
-                            save_file.write(row)
-
-                    save_file.flush()
-                    save_file.close()
-            except Exception as exception:
-                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
-
-                if self.IS_DEVELOP: raise exception
+    #########################################################
+    # PLOTTING
 
     def replace_fig(self, shadow_beam, var_x, var_y, xrange, yrange, nbins_h, nbins_v, nolost):
         if self.plot_canvas is None:
@@ -1056,7 +689,7 @@ class PowerPlotXY(AutomaticElement):
 
                     dist = self.image_plane_new_position - image_plane
 
-                self.retrace_beam(new_shadow_beam, dist)
+                new_shadow_beam._beam.retrace(dist)
 
                 beam_to_plot = new_shadow_beam
         else:
@@ -1128,47 +761,709 @@ class PowerPlotXY(AutomaticElement):
 
             if self.IS_DEVELOP: raise exception
 
-    def setBeam(self, input_beam):
-        self.cb_rays.setEnabled(True)
+    ##################################################
+    # SAVE
 
-        if not input_beam is None:
-            if not input_beam.scanned_variable_data is None and input_beam.scanned_variable_data.has_additional_parameter("total_power"):
-                self.input_beam = input_beam
+    def save_cumulated_data(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Current Plot", filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
 
-                self.current_step = self.input_beam.scanned_variable_data.get_additional_parameter("current_step")
-                self.total_steps = self.input_beam.scanned_variable_data.get_additional_parameter("total_steps")
-                self.energy_step = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
+        if not file_name is None and not file_name.strip()=="":
+            format, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", ("Hdf5", "Text", "Ansys", "All"), 3, False)
 
-                self.total_power = self.input_beam.scanned_variable_data.get_additional_parameter("total_power")
+            if ok and format:
+                if format == "Hdf5" or format == "All":  self.save_cumulated_data_hdf5(file_name)
+                if format == "Text" or format == "All":  self.save_cumulated_data_txt(file_name)
+                if format == "Ansys" or format == "All": self.save_cumulated_data_ansys(file_name)
 
-                if self.cumulated_quantity == 1: # Intensity
-                    self.total_power /= (1e3 * self.energy_step * codata.e) # to ph/s
+    def save_cumulated_data_hdf5(self, file_name):
+        if not self.plotted_ticket is None:
+            try:
+                save_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(os.path.splitext(file_name)[0] + ".hdf5"))
 
-                self.energy_max  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
+                save_file.write_coordinates(self.plotted_ticket)
+                save_file.add_plot_xy(self.plotted_ticket, dataset_name="power_density")
 
-                if self.energy_min is None:
-                    self.energy_min  = self.input_beam.scanned_variable_data.get_scanned_variable_value()
-                    self.cumulated_total_power = self.total_power
-                else:
-                    self.cumulated_total_power += self.total_power
+                save_file.close()
+            except Exception as exception:
+                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
 
-                if self.input_beam.scanned_variable_data.has_additional_parameter("is_footprint"):
-                    if self.input_beam.scanned_variable_data.get_additional_parameter("is_footprint"):
-                        self.cb_rays.setEnabled(False)
-                        self.rays = 0 # transmitted, absorbed doesn't make sense since is precalculated by footprint object
+                if self.IS_DEVELOP: raise exception
+
+    def save_cumulated_data_txt(self, file_name):
+        if not self.plotted_ticket is None:
+            try:
+                save_file = open(os.path.splitext(file_name)[0] + ".dat", "w")
+
+                x_values = self.plotted_ticket["bin_h_center"]
+                y_values = self.plotted_ticket["bin_v_center"]
+                z_values = self.plotted_ticket["histogram"]
+
+                for i in range(len(x_values)):
+                    for j in range(len(y_values)):
+                        row = str(x_values[i]) + " " + str(y_values[j]) + " " + str(z_values[i, j])
+
+                        if i+j > 0: row = "\n" + row
+
+                        save_file.write(row)
+
+                save_file.flush()
+                save_file.close()
+            except Exception as exception:
+                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise exception
+
+    def save_cumulated_data_ansys(self, file_name):
+        if not self.plotted_ticket is None:
+            try:
+                column, ok = QInputDialog.getItem(self, "Ansys File", "Empty column in Ansys axes system", ("x", "y", "z"), 2, False)
+
+                if ok and column:
+                    save_file = open(os.path.splitext(file_name)[0] + ".csv", "w")
+
+                    x_values = self.plotted_ticket["bin_h_center"]
+                    y_values = self.plotted_ticket["bin_v_center"]
+                    z_values = self.plotted_ticket["histogram"]
+
+                    for i in range(x_values.shape[0]):
+                        for j in range(y_values.shape[0]):
+                            if column == "x":   row = "0.0,"                              + str(x_values[i]) + ","  + str(y_values[j]) + "," + str(z_values[i, j])
+                            elif column == "y": row = str(x_values[i])                    + ",0.0,"                 + str(y_values[j]) + "," + str(z_values[i, j])
+                            elif column == "z": row = str(x_values[i]) + ","              + str(y_values[j])        + ",0.0,"                + str(z_values[i, j])
+
+                            if i+j > 0: row = "\n" + row
+
+                            save_file.write(row)
+
+                    save_file.flush()
+                    save_file.close()
+            except Exception as exception:
+                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise exception
+
+    ##################################################
+    # POST EDITING
+
+    def selectPlotFile(self):
+        file_name = oasysgui.selectFileFromDialog(self, None, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)")
+
+        if not file_name is None:
+            self.le_loaded_plot_file_name.setText(os.path.basename(os.path.normpath(file_name)))
+
+            plot_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(file_name), mode="r")
+
+            ticket = {}
+
+            ticket["histogram"], ticket["histogram_h"], ticket["histogram_v"], attributes = plot_file.get_last_plot(dataset_name="power_density")
+            ticket["bin_h_center"], ticket["bin_v_center"], ticket["h_label"], ticket["v_label"] = plot_file.get_coordinates()
+            ticket["intensity"] = attributes["intensity"]
+            ticket["nrays"] = attributes["total_rays"]
+            ticket["good_rays"] = attributes["good_rays"]
+
+            if self.plot_canvas is None:
+                self.plot_canvas = PowerPlotXYWidget()
+                self.image_box.layout().addWidget(self.plot_canvas)
+            else:
+                if not self.plotted_ticket is None:
+                    if QMessageBox.question(self, "Load Plot", "Merge with current Plot?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+                        if ticket["histogram"].shape == self.plotted_ticket["histogram"].shape and \
+                                ticket["bin_h_center"].shape == self.plotted_ticket["bin_h_center"].shape and \
+                                ticket["bin_v_center"].shape == self.plotted_ticket["bin_v_center"].shape and \
+                                ticket["bin_h_center"][0] == self.plotted_ticket["bin_h_center"][0] and \
+                                ticket["bin_h_center"][-1] == self.plotted_ticket["bin_h_center"][-1] and \
+                                ticket["bin_v_center"][0] == self.plotted_ticket["bin_v_center"][0] and \
+                                ticket["bin_v_center"][-1] == self.plotted_ticket["bin_v_center"][-1]:
+                            ticket["histogram"] += self.plotted_ticket["histogram"]
+
+                            if QMessageBox.question(self, "Load Plot", "Average with current Plot?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+                                ticket["histogram"] *= 0.5
+                        else:
+                            raise ValueError("The plots cannot be merged: the should have same dimensions and ranges")
+
+            try:
+                last_plotted_power = plot_file.get_attribute("last_plotted_power", dataset_name="additional_data")
+                last_incident_power = plot_file.get_attribute("last_incident_power", dataset_name="additional_data")
+                last_total_power = plot_file.get_attribute("last_total_power", dataset_name="additional_data")
+                energy_min = plot_file.get_attribute("last_energy_min", dataset_name="additional_data")
+                energy_max = plot_file.get_attribute("last_energy_max", dataset_name="additional_data")
+                energy_step = plot_file.get_attribute("last_energy_step", dataset_name="additional_data")
+            except:
+                last_plotted_power = numpy.sum(ticket["histogram"]) * (ticket["bin_h_center"][1] - ticket["bin_h_center"][0]) * (ticket["bin_v_center"][1] - ticket["bin_v_center"][0])
+                last_incident_power = 0.0
+                last_total_power = 0.0
+                energy_min = 0.0
+                energy_max = 0.0
+                energy_step = 0.0
+
+            try:
+                self.plot_canvas.cumulated_power_plot = last_plotted_power
+                self.plot_canvas.cumulated_previous_power_plot = last_incident_power
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=last_total_power,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.cumulated_ticket = ticket
+                self.plotted_ticket = ticket
+                self.plotted_ticket_original = ticket.copy()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def reloadPlot(self):
+        if not self.plotted_ticket_original is None:
+            ticket = self.plotted_ticket_original.copy()
+
+            if self.plot_canvas is None:
+                self.plot_canvas = PowerPlotXYWidget()
+                self.image_box.layout().addWidget(self.plot_canvas)
+
+            cumulated_power_plot = numpy.sum(ticket["histogram"]) * (ticket["bin_h_center"][1] - ticket["bin_h_center"][0]) * (ticket["bin_v_center"][1] - ticket["bin_v_center"][0])
+
+            try:
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def invertPlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                ticket = self.plotted_ticket.copy()
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                h_coord, v_coord, histogram = invert(h_coord, v_coord, histogram)
+
+                ticket["histogram"] = histogram
+                ticket["bin_h_center"] = h_coord
+                ticket["bin_v_center"] = v_coord
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(histogram) * pixel_area
+
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["v_label"],
+                                                           ticket["h_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def rescalePlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                congruence.checkStrictlyPositiveNumber(self.scaling_factor, "Scaling Factor")
+
+                ticket = self.plotted_ticket.copy()
+
+                histogram = ticket["histogram"] * self.scaling_factor
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                ticket["histogram"] = histogram
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(histogram) * pixel_area
+
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["v_label"],
+                                                           ticket["h_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def rebinPlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                congruence.checkStrictlyPositiveNumber(self.new_nbins_h, "Nr. Bins H")
+                congruence.checkStrictlyPositiveNumber(self.new_nbins_v, "Nr. Bins V")
+
+                ticket = self.plotted_ticket.copy()
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                h_coord, v_coord, histogram = rebin(h_coord, v_coord, histogram, (int(self.new_nbins_h), int(self.new_nbins_v)))
+
+                ticket["histogram"] = histogram
+                ticket["bin_h_center"] = h_coord
+                ticket["bin_v_center"] = v_coord
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(histogram) * pixel_area
+
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def cutPlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                congruence.checkLessThan(self.new_range_h_from, self.new_range_h_to, "New Range H from", "New Range H to")
+                congruence.checkLessThan(self.new_range_v_from, self.new_range_v_to, "New Range V from", "New Range V to")
+
+                ticket = self.plotted_ticket.copy()
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                congruence.checkGreaterOrEqualThan(self.new_range_h_from, h_coord[0], "New Range H from", "Original Min(H)")
+                congruence.checkLessOrEqualThan(self.new_range_h_to, h_coord[-1], "New Range H to", "Original Max(H)")
+                congruence.checkGreaterOrEqualThan(self.new_range_v_from, v_coord[0], "New Range V from", "Original Min(V)")
+                congruence.checkLessOrEqualThan(self.new_range_v_to, v_coord[-1], "New Range V to", "Original Max(V)")
+
+                h_coord, v_coord, histogram = cut(h_coord, v_coord, histogram,
+                                                  range_x=[self.new_range_h_from, self.new_range_h_to],
+                                                  range_y=[self.new_range_v_from, self.new_range_v_to])
+
+                ticket["histogram"] = histogram
+                ticket["bin_h_center"] = h_coord
+                ticket["bin_v_center"] = v_coord
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(histogram) * pixel_area
+
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["v_label"],
+                                                           ticket["h_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def maskPlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                if self.masking == 0:
+                    congruence.checkPositiveNumber(self.masking_level, "Masking Level")
+                if self.masking == 1:
+                    congruence.checkPositiveNumber(self.masking_width, "Masking Width")
+                    congruence.checkPositiveNumber(self.masking_height, "Masking height")
+                if self.masking == 2:
+                    congruence.checkPositiveNumber(self.masking_diameter, "Masking Radius")
+
+                ticket = copy.deepcopy(self.plotted_ticket)
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                if self.masking == 0:
+                    if self.masking_type == 0:
+                        mask = numpy.where(histogram <= self.masking_level)
                     else:
-                        self.cb_rays.setEnabled(True)
+                        mask = numpy.where(histogram >= self.masking_level)
+                    histogram[mask] = 0.0
+                elif self.masking == 1:
+                    if self.masking_type == 0:
+                        mask_h = numpy.where(numpy.logical_or(h_coord < -self.masking_width / 2, h_coord > self.masking_width / 2))
+                        mask_v = numpy.where(numpy.logical_or(v_coord < -self.masking_height / 2, v_coord > self.masking_height / 2))
 
-                if ShadowCongruence.checkEmptyBeam(input_beam):
-                    if ShadowCongruence.checkGoodBeam(input_beam):
-                        self.plot_results()
+                        histogram[mask_h, :] = 0.0
+                        histogram[:, mask_v] = 0.0
+                    else:
+                        mask_h = numpy.where(numpy.logical_and(h_coord >= -self.masking_width / 2, h_coord <= self.masking_width / 2))
+                        mask_v = numpy.where(numpy.logical_and(v_coord >= -self.masking_height / 2, v_coord <= self.masking_height / 2))
 
-    def writeStdOut(self, text):
-        cursor = self.shadow_output.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertText(text)
-        self.shadow_output.setTextCursor(cursor)
-        self.shadow_output.ensureCursorVisible()
+                        histogram[numpy.meshgrid(mask_h, mask_v)] = 0.0
+                elif self.masking == 2:
+                    h, v = numpy.meshgrid(h_coord, v_coord)
+                    r = numpy.sqrt(h ** 2 + v ** 2)
 
-    def retrace_beam(self, new_shadow_beam, dist):
-            new_shadow_beam._beam.retrace(dist)
+                    if self.masking_type == 0:
+                        mask = r > self.masking_diameter * 0.5
+                    else:
+                        mask = r <= self.masking_diameter * 0.5
+
+                    histogram[mask] = 0.0
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                ticket["histogram"] = histogram
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(ticket["histogram"]) * pixel_area
+
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def smoothPlot(self):
+        if not self.plotted_ticket is None:
+            try:
+                if self.filter == 0 or 2 <= self.filter <= 5:
+                    congruence.checkStrictlyPositiveNumber(self.filter_sigma_h, "Sigma/Size H")
+                    congruence.checkStrictlyPositiveNumber(self.filter_sigma_v, "Sigma/Size V")
+
+                if self.filter == 1: congruence.checkStrictlyPositiveNumber(self.filter_spline_order, "Spline Order")
+
+                ticket = self.plotted_ticket.copy()
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                norm = histogram.sum()
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                filter_mode = self.cb_filter_mode.currentText()
+
+                if self.filter == 0:
+                    histogram = filters.gaussian_filter(histogram, sigma=(self.filter_sigma_h, self.filter_sigma_v), mode=filter_mode, cval=self.filter_cval)
+                elif self.filter == 1:
+                    histogram = interpolation.spline_filter(histogram, order=int(self.filter_spline_order))
+                elif self.filter == 2:
+                    histogram = filters.uniform_filter(histogram, size=(int(self.filter_sigma_h), int(self.filter_sigma_v)), mode=filter_mode, cval=self.filter_cval)
+                elif self.filter == 3:
+                    histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_gaussian(numpy.fft.fft2(histogram), sigma=(self.filter_sigma_h, self.filter_sigma_v))))
+                elif self.filter == 4:
+                    histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_ellipsoid(numpy.fft.fft2(histogram), size=(self.filter_sigma_h, self.filter_sigma_v))))
+                elif self.filter == 5:
+                    histogram = numpy.real(numpy.fft.ifft2(fourier.fourier_uniform(numpy.fft.fft2(histogram), size=(self.filter_sigma_h, self.filter_sigma_v))))
+                elif self.filter == 6:
+                    histogram = self.apply_fill_holes(histogram)
+
+                norm /= histogram.sum()
+
+                ticket["histogram"] = histogram * norm
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(ticket["histogram"]) * pixel_area
+
+                energy_min = 0.0
+                energy_max = 0.0
+                energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def showFitFormulas(self):
+        dialog = ShowFitFormulasDialog(parent=self)
+        dialog.show()
+
+
+
+#################################################
+# UTILITIES
+
+def rebin(x, y, z, new_shape):
+    shape = (new_shape[0], z.shape[0] // new_shape[0], new_shape[1], z.shape[1] // new_shape[1])
+
+    return numpy.linspace(x[0], x[-1], new_shape[0]), \
+           numpy.linspace(y[0], y[-1], new_shape[1]), \
+           z.reshape(shape).mean(-1).mean(1)
+
+def invert(x, y, data):
+    return y, x, data.T
+
+def cut(x, y, data, range_x, range_y):
+    zoom_x = numpy.where(numpy.logical_and(x >= range_x[0], x <= range_x[1]))
+    zoom_y = numpy.where(numpy.logical_and(y >= range_y[0], y <= range_y[1]))
+    x = x[zoom_x]
+    y = y[zoom_y]
+
+    data = data[zoom_x, :]
+    data = data[0, :, zoom_y][0, :, :]
+
+    return x, y, data
+
+def apply_fill_holes(histogram):
+    from skimage.morphology import reconstruction
+
+    seed = numpy.copy(histogram)
+    seed[1:-1, 1:-1] = histogram.max()
+
+    filled = reconstruction(seed=seed, mask=histogram, method='erosion')
+
+    return filled * (histogram.sum() / filled.sum())
+
+####################################################
+# FIT FUNCTIONS
+
+def gaussian(c, height, center_x, center_y, fwhm_x, fwhm_y):
+    sigma_x = float(fwhm_x/2.355)
+    sigma_y = float(fwhm_y/2.355)
+
+    return lambda x, y: c + height * numpy.exp(-((0.5*((x-center_x)/sigma_x)**2) + (0.5*((y-center_y)/sigma_y)**2)))
+
+def pseudovoigt(c, height, center_x, center_y, fwhm_x, fwhm_y, mixing_x, mixing_y):
+    sigma_x = fwhm_x/2.355
+    gamma_x = fwhm_x/2
+    sigma_y = fwhm_y/2.355
+    gamma_y = fwhm_y/2
+
+    def pv(x, center, sigma, gamma, mixing):
+        return mixing*numpy.exp(-0.5*(x-center)**2/(sigma**2)) + (1-mixing)*((gamma**2)/((x-center)**2 + gamma**2))
+
+    return lambda x, y: c + height*pv(x, center_x, sigma_x, gamma_x, mixing_x)*pv(y, center_y, sigma_y, gamma_y, mixing_y)
+
+def polynomial(coefficients):
+    size = int(numpy.sqrt(len(coefficients)))
+    coefficients = numpy.array(coefficients).reshape((size,size))
+
+    return lambda x, y: polyval2d(x, y, coefficients)
+
+# Returns (x, y, width_x, width_y) the gaussian parameters of a 2D distribution by calculating its moments
+def guess_params_gaussian(xx, yy, data):
+    total = data.sum()
+    height = data.max()
+
+    X, Y = numpy.meshgrid(xx, yy)
+    center_x = (X*data).sum()/total
+    center_y = (Y*data).sum()/total
+    col = data[:, int(center_y)]
+    row = data[int(center_x), :]
+
+    sigma_x = numpy.sqrt(0.5*numpy.abs((xx-center_x)**2*col).sum()/col.sum())
+    sigma_y = numpy.sqrt(0.5*numpy.abs((yy-center_y)**2*row).sum()/row.sum())
+
+    return 0.001, height, center_x, center_y, sigma_x*2.355, sigma_y*2.355
+
+def guess_params_pv(xx, yy, data):
+    c, height, center_x, center_y, fwhm_x, fwhm_y = guess_params_gaussian(xx, yy, data)
+
+    return c, height, center_x, center_y, fwhm_x, fwhm_y, 0.5, 0.5
+
+def guess_params_poly(degree):
+    return numpy.ones(int(degree + 1)**2).tolist()
+
+def fit_gaussian(xx, yy, pd, guess_params=None):
+    error_function = lambda p: numpy.ravel(gaussian(*p)(*numpy.meshgrid(xx, yy)) - pd)
+
+    bounds = [[0,          0,         -numpy.inf, -numpy.inf, 0,         0],
+              [numpy.inf,  numpy.inf,  numpy.inf,  numpy.inf, numpy.inf, numpy.inf]]
+
+    optimized_result = least_squares(fun=error_function,
+                                     x0=guess_params_gaussian(xx, yy, pd) if guess_params is None else guess_params,
+                                     bounds=bounds)
+
+    return optimized_result.x
+
+def fit_pseudovoigt(xx, yy, pd, guess_params=None):
+    error_function = lambda p: numpy.ravel(pseudovoigt(*p)(*numpy.meshgrid(xx, yy)) - pd)
+
+    bounds = [[0,         0,        -numpy.inf, -numpy.inf, 0,         0,         0, 0],
+              [numpy.inf, numpy.inf, numpy.inf,  numpy.inf, numpy.inf, numpy.inf, 1, 1]]
+
+    optimized_result = least_squares(fun=error_function,
+                                     x0=guess_params_pv(xx, yy, pd) if guess_params is None else guess_params,
+                                     bounds=bounds)
+
+    return optimized_result.x
+
+def fit_polynomial(xx, yy, pd, degree=4, guess_params=None):
+    error_function = lambda p: numpy.ravel(polynomial(p)(*numpy.meshgrid(xx, yy)) - pd)
+
+    bounds = [numpy.full(int(degree + 1)**2, -numpy.inf).tolist(),
+              numpy.full(int(degree + 1)**2, numpy.inf).tolist()]
+    bounds[0][0] = 0.0
+
+    optimized_result = least_squares(fun=error_function,
+                                     x0=guess_params_poly(degree) if guess_params is None else guess_params,
+                                     bounds=bounds)
+
+    return optimized_result.x
+
+def get_fitted_data_gaussian(xx, yy, pd, guess_params=None):
+    params = fit_gaussian(xx, yy, pd, guess_params)
+    fit = gaussian(*params)
+
+    return fit(*numpy.meshgrid(xx, yy)), params
+
+def get_fitted_data_pv(xx, yy, pd, guess_params=None):
+    params = fit_pseudovoigt(xx, yy, pd, guess_params)
+    fit = pseudovoigt(*params)
+
+    return fit(*numpy.meshgrid(xx, yy)), params
+
+def get_fitted_data_poly(xx, yy, pd, degree=4, guess_params=None):
+    params = fit_polynomial(xx, yy, pd, degree, guess_params)
+    fit = polynomial(params)
+
+    return fit(*numpy.meshgrid(xx, yy)), params
+
+
+class ShowFitFormulasDialog(QDialog):
+
+    def __init__(self, parent=None):
+        QDialog.__init__(self, parent)
+        self.setWindowTitle('Fit Formulas')
+        layout = QVBoxLayout(self)
+
+        formulas_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "fit_formulas.png")
+
+        label = QLabel("")
+        label.setAlignment(Qt.AlignCenter)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        label.setPixmap(QPixmap(formulas_path))
+
+        bbox = QDialogButtonBox(QDialogButtonBox.Ok)
+
+        bbox.accepted.connect(self.accept)
+        layout.addWidget(label)
+        layout.addWidget(bbox)
