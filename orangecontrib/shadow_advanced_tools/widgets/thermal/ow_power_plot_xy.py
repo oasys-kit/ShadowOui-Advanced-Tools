@@ -56,7 +56,7 @@ from numpy.polynomial.polynomial import polyval2d
 
 from PyQt5.QtWidgets import QMessageBox, QFileDialog, QInputDialog, QDialog, \
     QLabel, QVBoxLayout, QDialogButtonBox, QSizePolicy
-from PyQt5.QtGui import QTextCursor, QPixmap
+from PyQt5.QtGui import QTextCursor, QPixmap, QFont, QColor, QPalette
 from PyQt5.QtCore import Qt
 
 import orangecanvas.resources as resources
@@ -156,6 +156,27 @@ class PowerPlotXY(AutomaticElement):
     masking_width = Setting(0.0)
     masking_height = Setting(0.0)
     masking_diameter = Setting(0.0)
+
+    fit_algorithm = Setting(0)
+
+    gauss_c = 0.0
+    gauss_A = 0.0
+    gauss_x0 = 0.0
+    gauss_y0 = 0.0
+    gauss_fx = 0.0
+    gauss_fy = 0.0
+
+    pv_c = 0.0
+    pv_A = 0.0
+    pv_x0 = 0.0
+    pv_y0 = 0.0
+    pv_fx = 0.0
+    pv_fy = 0.0
+    pv_mx = 0.0
+    pv_my = 0.0
+
+    poly_degree = Setting(4)
+    poly_coefficients = []
 
     cumulated_ticket=None
     plotted_ticket   = None
@@ -340,6 +361,14 @@ class PowerPlotXY(AutomaticElement):
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical")
         button = gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25)
+
+        font = QFont(button.font())
+        font.setItalic(True)
+        button.setFont(font)
+        palette = QPalette(button.palette())
+        palette.setColor(QPalette.ButtonText, QColor('dark red'))
+        button.setPalette(palette)
+
         gui.separator(button_box, height=10)
         gui.button(button_box, self, "Invert", callback=self.invertPlot, height=25)
         gui.button(button_box, self, "Rescale Plot", callback=self.rescalePlot, height=25)
@@ -424,8 +453,67 @@ class PowerPlotXY(AutomaticElement):
 
         post_box = oasysgui.widgetBox(tab_post_fit, "Fit Setting", addSpace=False, orientation="vertical", height=460)
 
+        self.fit_combo = gui.comboBox(post_box, self, "fit_algorithm", label="Fit Algorithm",
+                                      items=["Gaussian", "Pseudo-Voigt", "Polynomial"], labelWidth=200,
+                                      callback=self.set_FitAlgorithm, sendSelectedValue=False, orientation="horizontal")
+
+        self.fit_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=365)
+        self.fit_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=365)
+        self.fit_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=360)
+
+        le_gauss_c  = oasysgui.lineEdit(self.fit_box_1, self, "gauss_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        le_gauss_A  = oasysgui.lineEdit(self.fit_box_1, self, "gauss_A", "A [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_gauss_x0 = oasysgui.lineEdit(self.fit_box_1, self, "gauss_x0", "x0 ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_gauss_y0 = oasysgui.lineEdit(self.fit_box_1, self, "gauss_y0", "y0 ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_gauss_fx = oasysgui.lineEdit(self.fit_box_1, self, "gauss_fx", "fx ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_gauss_fy = oasysgui.lineEdit(self.fit_box_1, self, "gauss_fy", "fy ", labelWidth=200,  valueType=float, orientation="horizontal")
+
+        le_gauss_c.setReadOnly(True)
+        le_gauss_A.setReadOnly(True)
+        self.le_gauss_x0.setReadOnly(True)
+        self.le_gauss_y0.setReadOnly(True)
+        self.le_gauss_fx.setReadOnly(True)
+        self.le_gauss_fy.setReadOnly(True)
+
+        le_pv_c  = oasysgui.lineEdit(self.fit_box_2, self, "pv_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        le_pv_A  = oasysgui.lineEdit(self.fit_box_2, self, "pv_A", "A [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_pv_x0 = oasysgui.lineEdit(self.fit_box_2, self, "pv_x0", "x0 ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_pv_y0 = oasysgui.lineEdit(self.fit_box_2, self, "pv_y0", "y0 ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_pv_fx = oasysgui.lineEdit(self.fit_box_2, self, "pv_fx", "fx ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_pv_fy = oasysgui.lineEdit(self.fit_box_2, self, "pv_fy", "fy ", labelWidth=200,  valueType=float, orientation="horizontal")
+        le_pv_mx = oasysgui.lineEdit(self.fit_box_2, self, "pv_mx", "mx", labelWidth=200,  valueType=float, orientation="horizontal")
+        le_pv_my = oasysgui.lineEdit(self.fit_box_2, self, "pv_my", "my", labelWidth=200,  valueType=float, orientation="horizontal")
+
+        le_pv_c.setReadOnly(True)
+        le_pv_A.setReadOnly(True)
+        self.le_pv_x0.setReadOnly(True)
+        self.le_pv_y0.setReadOnly(True)
+        self.le_pv_fx.setReadOnly(True)
+        self.le_pv_fy.setReadOnly(True)
+        le_pv_mx.setReadOnly(True)
+        le_pv_my.setReadOnly(True)
+
+        oasysgui.lineEdit(self.fit_box_3, self, "poly_degree", "Degree", labelWidth=260, valueType=int, orientation="horizontal")
+        oasysgui.widgetLabel(self.fit_box_3, "Polynomial Coefficients")
+
+        text_box = oasysgui.widgetBox(self.fit_box_3, "", addSpace=False, orientation="vertical", height=280)
+
+        self.poly_coefficients_text = oasysgui.textArea(280, 350, readOnly=True)
+        text_box.layout().addWidget(self.poly_coefficients_text)
+
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
-        gui.button(button_box, self, "Show Fit Formulas Plot", callback=self.showFitFormulas, height=25)
+        gui.button(button_box, self, "Do Fit", callback=self.doFit, height=25)
+        button = gui.button(button_box, self, "Show Fit Formulas Plot", callback=self.showFitFormulas, height=25)
+
+
+        font = QFont(button.font())
+        font.setItalic(True)
+        button.setFont(font)
+        palette = QPalette(button.palette())
+        palette.setColor(QPalette.ButtonText, QColor('dark blue'))
+        button.setPalette(palette)
+
+        self.set_FitAlgorithm()
 
         #######################################################
         # MAIN TAB
@@ -521,8 +609,31 @@ class PowerPlotXY(AutomaticElement):
     def set_FilterMode(self):
         self.le_filter_cval.setEnabled(self.filter_mode==1)
 
+    def set_FitAlgorithm(self):
+        self.fit_box_1.setVisible(self.fit_algorithm==0)
+        self.fit_box_2.setVisible(self.fit_algorithm==1)
+        self.fit_box_3.setVisible(self.fit_algorithm==2)
+
     def selectAutosaveFile(self):
         self.le_autosave_file_name.setText(oasysgui.selectFileFromDialog(self, self.autosave_file_name, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)"))
+
+    def after_change_workspace_units(self):
+        label = self.le_gauss_x0.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_gauss_y0.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_gauss_fx.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_gauss_fy.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_pv_x0.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_pv_y0.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_pv_fx.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_pv_fy.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
 
     #########################################################
     # I/O
@@ -1306,7 +1417,66 @@ class PowerPlotXY(AutomaticElement):
         dialog = ShowFitFormulasDialog(parent=self)
         dialog.show()
 
+    def doFit(self):
+        if not self.plotted_ticket is None:
+            try:
+                ticket = self.plotted_ticket.copy()
 
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+
+                def chisquare(pd, pd_fit, n):
+                    N = pd.shape[0]*pd.shape[1]
+                    squared_deviations = (pd-pd_fit)**2
+
+                    return squared_deviations.sum()/(N-n)
+
+
+
+                if self.fit_algorithm == 0:
+                    pd_fit_g, params_g = get_fitted_data_gaussian(h_coord, v_coord, histogram)
+
+                    self.gauss_c =  round(params_g[0], 4)
+                    self.gauss_A =  round(params_g[1], 4)
+                    self.gauss_x0 = round(params_g[2], 4)
+                    self.gauss_y0 = round(params_g[3], 4)
+                    self.gauss_fx = round(params_g[4], 6)
+                    self.gauss_fy = round(params_g[5], 6)
+
+                    self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", chisquare(histogram, pd_fit_g, 6))
+
+                elif self.fit_algorithm == 1:
+                    pd_fit_pv, params_pv = get_fitted_data_pv(h_coord, v_coord, histogram)
+
+                    self.pv_c =  round(params_pv[0], 4)
+                    self.pv_A =  round(params_pv[1], 4)
+                    self.pv_x0 = round(params_pv[2], 4)
+                    self.pv_y0 = round(params_pv[3], 4)
+                    self.pv_fx = round(params_pv[4], 6)
+                    self.pv_fy = round(params_pv[5], 6)
+                    self.pv_mx = round(params_pv[6], 4)
+                    self.pv_my = round(params_pv[7], 4)
+
+                    self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", chisquare(histogram, pd_fit_pv, 8))
+                elif self.fit_algorithm == 2:
+                    congruence.checkStrictlyPositiveNumber(self.poly_degree, "Degree")
+
+                    pd_fit_poly, params_poly = get_fitted_data_poly(h_coord, v_coord, histogram, self.poly_degree)
+
+                    self.poly_coefficients_text.setText(str(params_poly))
+
+                    self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", chisquare(histogram, pd_fit_poly, len(params_poly)))
+
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare):
+        dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, parent=self)
+        dialog.show()
 
 #################################################
 # UTILITIES
@@ -1368,21 +1538,18 @@ def polynomial(coefficients):
 
     return lambda x, y: polyval2d(x, y, coefficients)
 
+from oasys.util.oasys_util import get_sigma, get_average
+
 # Returns (x, y, width_x, width_y) the gaussian parameters of a 2D distribution by calculating its moments
 def guess_params_gaussian(xx, yy, data):
-    total = data.sum()
-    height = data.max()
+    h_histo = data.sum(axis=0)
+    v_histo = data.sum(axis=1)
+    center_x = get_average(h_histo, xx)
+    center_y = get_average(v_histo, yy)
+    sigma_x = get_sigma(h_histo, xx)
+    sigma_y = get_sigma(v_histo, yy)
 
-    X, Y = numpy.meshgrid(xx, yy)
-    center_x = (X*data).sum()/total
-    center_y = (Y*data).sum()/total
-    col = data[:, int(center_y)]
-    row = data[int(center_x), :]
-
-    sigma_x = numpy.sqrt(0.5*numpy.abs((xx-center_x)**2*col).sum()/col.sum())
-    sigma_y = numpy.sqrt(0.5*numpy.abs((yy-center_y)**2*row).sum()/row.sum())
-
-    return 0.001, height, center_x, center_y, sigma_x*2.355, sigma_y*2.355
+    return 0.001, data.max(), center_x, center_y, sigma_x*2.355, sigma_y*2.355
 
 def guess_params_pv(xx, yy, data):
     c, height, center_x, center_y, fwhm_x, fwhm_y = guess_params_gaussian(xx, yy, data)
@@ -1466,4 +1633,42 @@ class ShowFitFormulasDialog(QDialog):
 
         bbox.accepted.connect(self.accept)
         layout.addWidget(label)
+        layout.addWidget(bbox)
+
+from matplotlib import cm
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+
+class ShowFitResultDialog(QDialog):
+
+    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, parent=None):
+        QDialog.__init__(self, parent)
+        self.setWindowTitle('Fit Result')
+        layout = QVBoxLayout(self)
+
+        figure = Figure(figsize=(4, 8))
+        figure.patch.set_facecolor('white')
+
+        ax = figure.add_subplot(1, 1, 1, projection='3d')
+
+        x_to_plot, y_to_plot = numpy.meshgrid(xx, yy)
+
+        ax.plot_surface(x_to_plot, y_to_plot, pd,
+                        rstride=1, cstride=1, cmap=cm.coolwarm, linewidth=0.5, antialiased=True, alpha=0.25)
+
+        ax.plot_surface(x_to_plot, y_to_plot, pd_fit,
+                        rstride=1, cstride=1, cmap=cm.Blues, linewidth=0.5, antialiased=True, alpha=0.75)
+
+        ax.set_title(algorithm + " Fit\n\u03c7\u00b2 (RSS/\u03bd): " + str(chisquare))
+        ax.set_xlabel("H [mm]")
+        ax.set_ylabel("V [mm]")
+        ax.set_zlabel("Power Density [W/mm\u00b2]")
+        ax.mouse_init()
+
+        figure_canvas = FigureCanvasQTAgg(figure)
+
+        bbox = QDialogButtonBox(QDialogButtonBox.Ok)
+
+        bbox.accepted.connect(self.accept)
+        layout.addWidget(figure_canvas)
         layout.addWidget(bbox)
