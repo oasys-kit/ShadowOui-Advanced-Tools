@@ -1252,8 +1252,8 @@ class PowerPlotXY(AutomaticElement):
 
                 self.plot_canvas.cumulated_power_plot = cumulated_power_plot
                 self.plot_canvas.plot_power_density_ticket(ticket,
-                                                           ticket["v_label"],
                                                            ticket["h_label"],
+                                                           ticket["v_label"],
                                                            cumulated_total_power=0.0,
                                                            energy_min=energy_min,
                                                            energy_max=energy_max,
@@ -1422,18 +1422,16 @@ class PowerPlotXY(AutomaticElement):
             try:
                 ticket = self.plotted_ticket.copy()
 
-                histogram = ticket["histogram"]
+                # NB, matplotlib inverts....
+                histogram = ticket["histogram"].T
                 h_coord = ticket["bin_h_center"]
                 v_coord = ticket["bin_v_center"]
-
 
                 def chisquare(pd, pd_fit, n):
                     N = pd.shape[0]*pd.shape[1]
                     squared_deviations = (pd-pd_fit)**2
 
                     return squared_deviations.sum()/(N-n)
-
-
 
                 if self.fit_algorithm == 0:
                     pd_fit_g, params_g = get_fitted_data_gaussian(h_coord, v_coord, histogram)
@@ -1494,13 +1492,8 @@ def invert(x, y, data):
 def cut(x, y, data, range_x, range_y):
     zoom_x = numpy.where(numpy.logical_and(x >= range_x[0], x <= range_x[1]))
     zoom_y = numpy.where(numpy.logical_and(y >= range_y[0], y <= range_y[1]))
-    x = x[zoom_x]
-    y = y[zoom_y]
 
-    data = data[zoom_x, :]
-    data = data[0, :, zoom_y][0, :, :]
-
-    return x, y, data
+    return x[zoom_x], y[zoom_y], data[numpy.meshgrid(zoom_x, zoom_y)].T
 
 def apply_fill_holes(histogram):
     from skimage.morphology import reconstruction

@@ -487,8 +487,8 @@ class PowerPlotXYWidget(QWidget):
             self.plot_canvas.getRoiAction().setVisible(False)
             self.plot_canvas.getColormapAction().setVisible(True)
 
-        origin = (dataX[0],dataY[0])
-        scale = (dataX[1]-dataX[0],dataY[1]-dataY[0])
+        origin = (dataX[0], dataY[0])
+        scale = (dataX[1]-dataX[0], dataY[1]-dataY[0])
 
         self.plot_canvas.addImage(numpy.array(data2D.T),
                                   legend="power",
