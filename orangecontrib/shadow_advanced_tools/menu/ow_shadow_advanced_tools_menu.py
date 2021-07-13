@@ -63,6 +63,7 @@ class ShadowAdvancedToolsMenu(OMenu):
         self.addSubMenu("Select Plotting \"No\" in all the Power Plot XY widgets")
         self.addSeparator()
         self.addSubMenu("Clear all the cumulated plots in Power Plot XY widgets")
+        self.addSubMenu("Reload all the cumulated plots in Power Plot XY widgets (Crash Recovery)")
         self.closeContainer()
 
     def executeAction_1(self, action):
@@ -118,6 +119,17 @@ class ShadowAdvancedToolsMenu(OMenu):
                 widget = self.canvas_main_window.current_document().scheme().widget_for_node(node)
 
                 if isinstance(widget, PowerPlotXY): widget.clearResults(interactive=False)
+        except Exception as exception:
+            QtWidgets.QMessageBox.critical(None, "Error",
+                exception.args[0],
+                QtWidgets.QMessageBox.Ok)
+
+    def executeAction_6(self, action):
+        try:
+            for node in self.canvas_main_window.current_document().scheme().nodes:
+                widget = self.canvas_main_window.current_document().scheme().widget_for_node(node)
+
+                if isinstance(widget, PowerPlotXY): widget.load_partial_results()
         except Exception as exception:
             QtWidgets.QMessageBox.critical(None, "Error",
                 exception.args[0],

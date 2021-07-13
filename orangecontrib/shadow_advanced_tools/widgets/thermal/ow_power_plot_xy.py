@@ -1476,6 +1476,61 @@ class PowerPlotXY(AutomaticElement):
         dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, parent=self)
         dialog.show()
 
+
+    def load_partial_results(self):
+        file_name = self.autosave_file_name
+
+        if not file_name is None:
+            plot_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(file_name), mode="r")
+
+            ticket = {}
+
+            ticket["histogram"], ticket["histogram_h"], ticket["histogram_v"], attributes = plot_file.get_last_plot(dataset_name="power_density")
+            ticket["bin_h_center"], ticket["bin_v_center"], ticket["h_label"], ticket["v_label"] = plot_file.get_coordinates()
+            ticket["intensity"] = attributes["intensity"]
+            ticket["nrays"] = attributes["total_rays"]
+            ticket["good_rays"] = attributes["good_rays"]
+
+            if self.plot_canvas is None:
+                self.plot_canvas = PowerPlotXYWidget()
+                self.image_box.layout().addWidget(self.plot_canvas)
+
+            try:
+                last_plotted_power = plot_file.get_attribute("last_plotted_power", dataset_name="additional_data")
+                last_incident_power = plot_file.get_attribute("last_incident_power", dataset_name="additional_data")
+                last_total_power = plot_file.get_attribute("last_total_power", dataset_name="additional_data")
+                energy_min = plot_file.get_attribute("last_energy_min", dataset_name="additional_data")
+                energy_max = plot_file.get_attribute("last_energy_max", dataset_name="additional_data")
+                energy_step = plot_file.get_attribute("last_energy_step", dataset_name="additional_data")
+            except:
+                last_plotted_power = numpy.sum(ticket["histogram"]) * (ticket["bin_h_center"][1] - ticket["bin_h_center"][0]) * (ticket["bin_v_center"][1] - ticket["bin_v_center"][0])
+                last_incident_power = 0.0
+                last_total_power = 0.0
+                energy_min = 0.0
+                energy_max = 0.0
+                energy_step = 0.0
+
+            try:
+                self.plot_canvas.cumulated_power_plot = last_plotted_power
+                self.plot_canvas.cumulated_previous_power_plot = last_incident_power
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["h_label"],
+                                                           ticket["v_label"],
+                                                           cumulated_total_power=last_total_power,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.cumulated_ticket = ticket
+                self.plotted_ticket = ticket
+                self.plotted_ticket_original = ticket.copy()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+
 #################################################
 # UTILITIES
 
