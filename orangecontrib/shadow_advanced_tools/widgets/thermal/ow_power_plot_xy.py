@@ -525,7 +525,7 @@ class PowerPlotXY(AutomaticElement):
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
         gui.button(button_box, self, "Do Fit", callback=self.doFit, height=25)
-        button = gui.button(button_box, self, "Show Fit Formulas Plot", callback=self.showFitFormulas, height=25)
+        button = gui.button(button_box, self, "Show Fit Formulas", callback=self.showFitFormulas, height=25)
 
 
         font = QFont(button.font())

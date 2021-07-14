@@ -63,7 +63,7 @@ class ShadowAdvancedToolsMenu(OMenu):
         self.addSubMenu("Select Plotting \"No\" in all the Power Plot XY widgets")
         self.addSeparator()
         self.addSubMenu("Clear all the cumulated plots in Power Plot XY widgets")
-        self.addSubMenu("Reload all the cumulated plots in Power Plot XY widgets (Crash Recovery)")
+        self.addSubMenu("Reload all the cumulated plots in Power Plot XY widgets (from work. dir.)")
         self.closeContainer()
 
     def executeAction_1(self, action):
