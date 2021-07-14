@@ -76,6 +76,23 @@ from orangecontrib.shadow_advanced_tools.util.gui import PowerPlotXYWidget
 
 import scipy.constants as codata
 
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+cdict_temperature = {'red': ((0.0, 0.0, 0.0),
+                             (0.5, 0.0, 0.0),
+                             (0.75, 1.0, 1.0),
+                             (1.0, 1.0, 1.0)),
+                     'green': ((0.0, 0.0, 0.0),
+                               (0.25, 1.0, 1.0),
+                               (0.75, 1.0, 1.0),
+                               (1.0, 0.0, 0.0)),
+                     'blue': ((0.0, 1.0, 1.0),
+                              (0.25, 1.0, 1.0),
+                              (0.5, 0.0, 0.0),
+                              (1.0, 0.0, 0.0))}
+
+cmap_temperature = LinearSegmentedColormap('temperature', cdict_temperature, 256)
+
 class PowerPlotXY(AutomaticElement):
 
     name = "Power Plot XY - Undulator"
@@ -158,6 +175,7 @@ class PowerPlotXY(AutomaticElement):
     masking_diameter = Setting(0.0)
 
     fit_algorithm = Setting(0)
+    show_fit_plot = Setting(1)
 
     gauss_c = 0.0
     gauss_A = 0.0
@@ -453,9 +471,13 @@ class PowerPlotXY(AutomaticElement):
 
         post_box = oasysgui.widgetBox(tab_post_fit, "Fit Setting", addSpace=False, orientation="vertical", height=460)
 
-        self.fit_combo = gui.comboBox(post_box, self, "fit_algorithm", label="Fit Algorithm",
-                                      items=["Gaussian", "Pseudo-Voigt", "Polynomial"], labelWidth=200,
-                                      callback=self.set_FitAlgorithm, sendSelectedValue=False, orientation="horizontal")
+        gui.comboBox(post_box, self, "fit_algorithm", label="Fit Algorithm",
+                     items=["Gaussian", "Pseudo-Voigt", "Polynomial"], labelWidth=200,
+                     callback=self.set_FitAlgorithm, sendSelectedValue=False, orientation="horizontal")
+
+        gui.comboBox(post_box, self, "show_fit_plot", label="Show Fit Plot",
+                     items=["No", "Yes"], labelWidth=260,
+                     sendSelectedValue=False, orientation="horizontal")
 
         self.fit_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=365)
         self.fit_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=365)
@@ -885,6 +907,7 @@ class PowerPlotXY(AutomaticElement):
                 if format == "Hdf5" or format == "All":  self.save_cumulated_data_hdf5(file_name)
                 if format == "Text" or format == "All":  self.save_cumulated_data_txt(file_name)
                 if format == "Ansys" or format == "All": self.save_cumulated_data_ansys(file_name)
+                self.save_cumulated_data_image(file_name)
 
     def save_cumulated_data_hdf5(self, file_name):
         if not self.plotted_ticket is None:
@@ -923,6 +946,46 @@ class PowerPlotXY(AutomaticElement):
                 QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
 
                 if self.IS_DEVELOP: raise exception
+
+    def save_cumulated_data_image(self, file_name):
+        if not self.plotted_ticket is None:
+            try:
+                def duplicate(obj):
+                    import io, pickle
+                    buf = io.BytesIO()
+                    pickle.dump(obj, buf)
+                    buf.seek(0)
+                    return pickle.load(buf)
+
+                fig = duplicate(self.plot_canvas.plot_canvas._backend.fig)
+
+                vmin = numpy.min(self.plotted_ticket["histogram"])
+                vmax = numpy.max(self.plotted_ticket["histogram"])
+
+                cbar = fig.colorbar(cm.ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=cmap_temperature), ax=fig.gca())
+                cbar.ax.set_ylabel('Power Density [W/mm\u00b2]')
+                ticks = cbar.get_ticks()
+                cbar.set_ticks([vmax] + list(ticks))
+
+                def format_number(number):
+                    order_of_magnitude = (1 if number >= 1 else -1) * int(numpy.floor(numpy.log10(numpy.abs(number))))
+
+                    if order_of_magnitude > 3:
+                        return round(number, 1)
+                    elif order_of_magnitude >= 0:
+                        return round(number, 4 - order_of_magnitude)
+                    else:
+                        return round(number, 3 + abs(order_of_magnitude))
+
+                cbar.set_ticklabels([str(format_number(vmax))] + ["{:.1e}".format(t) for t in ticks])
+
+                fig.savefig(os.path.splitext(file_name)[0] + ".png")
+
+            except Exception as exception:
+                QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise exception
+
 
     def save_cumulated_data_ansys(self, file_name):
         if not self.plotted_ticket is None:
@@ -1433,6 +1496,8 @@ class PowerPlotXY(AutomaticElement):
 
                     return squared_deviations.sum()/(N-n)
 
+                show = self.show_fit_plot == 1
+
                 if self.fit_algorithm == 0:
                     pd_fit_g, params_g = get_fitted_data_gaussian(h_coord, v_coord, histogram)
 
@@ -1443,7 +1508,7 @@ class PowerPlotXY(AutomaticElement):
                     self.gauss_fx = round(params_g[4], 6)
                     self.gauss_fy = round(params_g[5], 6)
 
-                    self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", chisquare(histogram, pd_fit_g, 6))
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", chisquare(histogram, pd_fit_g, 6))
 
                 elif self.fit_algorithm == 1:
                     pd_fit_pv, params_pv = get_fitted_data_pv(h_coord, v_coord, histogram)
@@ -1457,7 +1522,8 @@ class PowerPlotXY(AutomaticElement):
                     self.pv_mx = round(params_pv[6], 4)
                     self.pv_my = round(params_pv[7], 4)
 
-                    self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", chisquare(histogram, pd_fit_pv, 8))
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", chisquare(histogram, pd_fit_pv, 8))
+
                 elif self.fit_algorithm == 2:
                     congruence.checkStrictlyPositiveNumber(self.poly_degree, "Degree")
 
@@ -1465,7 +1531,7 @@ class PowerPlotXY(AutomaticElement):
 
                     self.poly_coefficients_text.setText(str(params_poly))
 
-                    self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", chisquare(histogram, pd_fit_poly, len(params_poly)))
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", chisquare(histogram, pd_fit_poly, len(params_poly)))
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
@@ -1475,7 +1541,6 @@ class PowerPlotXY(AutomaticElement):
     def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare):
         dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, parent=self)
         dialog.show()
-
 
     def load_partial_results(self):
         file_name = self.autosave_file_name
