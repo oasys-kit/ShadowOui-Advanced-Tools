@@ -183,6 +183,7 @@ class PowerPlotXY(AutomaticElement):
     gauss_y0 = 0.0
     gauss_fx = 0.0
     gauss_fy = 0.0
+    gauss_chisquare = 0.0
 
     pv_c = 0.0
     pv_A = 0.0
@@ -192,9 +193,11 @@ class PowerPlotXY(AutomaticElement):
     pv_fy = 0.0
     pv_mx = 0.0
     pv_my = 0.0
+    pv_chisquare = 0.0
 
     poly_degree = Setting(4)
     poly_coefficients = []
+    poly_chisquare = 0.0
 
     cumulated_ticket=None
     plotted_ticket   = None
@@ -479,9 +482,9 @@ class PowerPlotXY(AutomaticElement):
                      items=["No", "Yes"], labelWidth=260,
                      sendSelectedValue=False, orientation="horizontal")
 
-        self.fit_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=365)
-        self.fit_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=365)
-        self.fit_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=360)
+        self.fit_box_1 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=340)
+        self.fit_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=340)
+        self.fit_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=340)
 
         le_gauss_c  = oasysgui.lineEdit(self.fit_box_1, self, "gauss_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
         le_gauss_A  = oasysgui.lineEdit(self.fit_box_1, self, "gauss_A", "A [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
@@ -489,6 +492,7 @@ class PowerPlotXY(AutomaticElement):
         self.le_gauss_y0 = oasysgui.lineEdit(self.fit_box_1, self, "gauss_y0", "y0 ", labelWidth=200,  valueType=float, orientation="horizontal")
         self.le_gauss_fx = oasysgui.lineEdit(self.fit_box_1, self, "gauss_fx", "fx ", labelWidth=200,  valueType=float, orientation="horizontal")
         self.le_gauss_fy = oasysgui.lineEdit(self.fit_box_1, self, "gauss_fy", "fy ", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_gauss_chisquare = oasysgui.lineEdit(self.fit_box_1, self, "gauss_chisquare", "\u03c7\u00b2 (RSS/\u03bd)", labelWidth=200,  valueType=float, orientation="horizontal")
 
         le_gauss_c.setReadOnly(True)
         le_gauss_A.setReadOnly(True)
@@ -496,6 +500,7 @@ class PowerPlotXY(AutomaticElement):
         self.le_gauss_y0.setReadOnly(True)
         self.le_gauss_fx.setReadOnly(True)
         self.le_gauss_fy.setReadOnly(True)
+        self.le_gauss_chisquare.setReadOnly(True)
 
         le_pv_c  = oasysgui.lineEdit(self.fit_box_2, self, "pv_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
         le_pv_A  = oasysgui.lineEdit(self.fit_box_2, self, "pv_A", "A [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
@@ -505,6 +510,7 @@ class PowerPlotXY(AutomaticElement):
         self.le_pv_fy = oasysgui.lineEdit(self.fit_box_2, self, "pv_fy", "fy ", labelWidth=200,  valueType=float, orientation="horizontal")
         le_pv_mx = oasysgui.lineEdit(self.fit_box_2, self, "pv_mx", "mx", labelWidth=200,  valueType=float, orientation="horizontal")
         le_pv_my = oasysgui.lineEdit(self.fit_box_2, self, "pv_my", "my", labelWidth=200,  valueType=float, orientation="horizontal")
+        self.le_pv_chisquare = oasysgui.lineEdit(self.fit_box_2, self, "pv_chisquare", "\u03c7\u00b2 (RSS/\u03bd)", labelWidth=200,  valueType=float, orientation="horizontal")
 
         le_pv_c.setReadOnly(True)
         le_pv_A.setReadOnly(True)
@@ -514,19 +520,22 @@ class PowerPlotXY(AutomaticElement):
         self.le_pv_fy.setReadOnly(True)
         le_pv_mx.setReadOnly(True)
         le_pv_my.setReadOnly(True)
+        self.le_pv_chisquare.setReadOnly(True)
 
         oasysgui.lineEdit(self.fit_box_3, self, "poly_degree", "Degree", labelWidth=260, valueType=int, orientation="horizontal")
         oasysgui.widgetLabel(self.fit_box_3, "Polynomial Coefficients")
 
-        text_box = oasysgui.widgetBox(self.fit_box_3, "", addSpace=False, orientation="vertical", height=280)
+        text_box = oasysgui.widgetBox(self.fit_box_3, "", addSpace=False, orientation="vertical", height=205)
 
-        self.poly_coefficients_text = oasysgui.textArea(280, 350, readOnly=True)
+        self.poly_coefficients_text = oasysgui.textArea(205, 350, readOnly=True)
         text_box.layout().addWidget(self.poly_coefficients_text)
+        self.le_poly_chisquare = oasysgui.lineEdit(self.fit_box_3, self, "poly_chisquare", "\u03c7\u00b2 (RSS/\u03bd)", labelWidth=200,  valueType=float, orientation="horizontal")
+
+        self.le_poly_chisquare.setReadOnly(True)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
         gui.button(button_box, self, "Do Fit", callback=self.doFit, height=25)
         button = gui.button(button_box, self, "Show Fit Formulas", callback=self.showFitFormulas, height=25)
-
 
         font = QFont(button.font())
         font.setItalic(True)
@@ -1507,8 +1516,9 @@ class PowerPlotXY(AutomaticElement):
                     self.gauss_y0 = round(params_g[3], 4)
                     self.gauss_fx = round(params_g[4], 6)
                     self.gauss_fy = round(params_g[5], 6)
+                    self.gauss_chisquare = round(chisquare(histogram, pd_fit_g, 6), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", chisquare(histogram, pd_fit_g, 6))
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", self.gauss_chisquare)
 
                 elif self.fit_algorithm == 1:
                     pd_fit_pv, params_pv = get_fitted_data_pv(h_coord, v_coord, histogram)
@@ -1521,8 +1531,9 @@ class PowerPlotXY(AutomaticElement):
                     self.pv_fy = round(params_pv[5], 6)
                     self.pv_mx = round(params_pv[6], 4)
                     self.pv_my = round(params_pv[7], 4)
+                    self.pv_chisquare = round(chisquare(histogram, pd_fit_pv, 8), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", chisquare(histogram, pd_fit_pv, 8))
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", self.pv_chisquare)
 
                 elif self.fit_algorithm == 2:
                     congruence.checkStrictlyPositiveNumber(self.poly_degree, "Degree")
@@ -1530,8 +1541,9 @@ class PowerPlotXY(AutomaticElement):
                     pd_fit_poly, params_poly = get_fitted_data_poly(h_coord, v_coord, histogram, self.poly_degree)
 
                     self.poly_coefficients_text.setText(str(params_poly))
+                    self.poly_chisquare = round(chisquare(histogram, pd_fit_poly, len(params_poly)), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", chisquare(histogram, pd_fit_poly, len(params_poly)))
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", self.poly_chisquare)
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
