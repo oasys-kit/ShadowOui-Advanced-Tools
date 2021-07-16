@@ -646,7 +646,8 @@ class PowerPlotXY(AutomaticElement):
         self.fit_box_3.setVisible(self.fit_algorithm==2)
 
     def selectAutosaveFile(self):
-        self.le_autosave_file_name.setText(oasysgui.selectFileFromDialog(self, self.autosave_file_name, "Select File", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)"))
+        file_name = oasysgui.selectSaveFileFromDialog(self, "Select File", default_file_name="", file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf)")
+        self.le_autosave_file_name.setText("" if file_name is None else file_name)
 
     def after_change_workspace_units(self):
         label = self.le_gauss_x0.parent().layout().itemAt(0).widget()
@@ -907,7 +908,8 @@ class PowerPlotXY(AutomaticElement):
     # SAVE
 
     def save_cumulated_data(self):
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Current Plot", filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
+        file_name = oasysgui.selectSaveFileFromDialog(self, "Save Current Plot", default_file_name=("" if self.autosave==0 else self.autosave_file_name),
+                                                      file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
 
         if not file_name is None and not file_name.strip()=="":
             format, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", ("Hdf5", "Text", "Ansys", "All"), 3, False)
@@ -1518,7 +1520,16 @@ class PowerPlotXY(AutomaticElement):
                     self.gauss_fy = round(params_g[5], 6)
                     self.gauss_chisquare = round(chisquare(histogram, pd_fit_g, 6), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", self.gauss_chisquare)
+                    params_string = '\n'.join((
+                        r'$c=%.4f$' %   (self.gauss_c,),
+                        r'$A=%.4f$' %   (self.gauss_A,),
+                        r'$x_0=%.4f$' % (self.gauss_x0,),
+                        r'$y_0=%.4f$' % (self.gauss_y0,),
+                        r'$f_x=%.6f$' % (self.gauss_fx,),
+                        r'$f_y=%.6f$' % (self.gauss_fy,),
+                    ))
+
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", self.gauss_chisquare, params_string)
 
                 elif self.fit_algorithm == 1:
                     pd_fit_pv, params_pv = get_fitted_data_pv(h_coord, v_coord, histogram)
@@ -1533,29 +1544,55 @@ class PowerPlotXY(AutomaticElement):
                     self.pv_my = round(params_pv[7], 4)
                     self.pv_chisquare = round(chisquare(histogram, pd_fit_pv, 8), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", self.pv_chisquare)
+                    params_string = '\n'.join((
+                        r'$c=%.4f$' %   (self.pv_c,),
+                        r'$A=%.4f$' %   (self.pv_A,),
+                        r'$x_0=%.4f$' % (self.pv_x0,),
+                        r'$y_0=%.4f$' % (self.pv_y0,),
+                        r'$f_x=%.6f$' % (self.pv_fx,),
+                        r'$f_y=%.6f$' % (self.pv_fy,),
+                        r'$m_x=%.4f$' % (self.pv_mx,),
+                        r'$m_y=%.4f$' % (self.pv_my,),
+                    ))
+
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", self.pv_chisquare, params_string)
 
                 elif self.fit_algorithm == 2:
                     congruence.checkStrictlyPositiveNumber(self.poly_degree, "Degree")
 
                     pd_fit_poly, params_poly = get_fitted_data_poly(h_coord, v_coord, histogram, self.poly_degree)
 
-                    self.poly_coefficients_text.setText(str(params_poly))
+                    params_poly = numpy.reshape(params_poly, (self.poly_degree + 1, self.poly_degree + 1))
+                    params_string     = []
+                    params_string_mpl = []
+                    for i in range(params_poly.shape[0]):
+                        for j in range(params_poly.shape[1]):
+                            param = params_poly[i, j]
+                            params_string.append(r'c%d,%d=%.4f$' %   (i, j, param,))
+                            params_string_mpl.append(r'$c_{%d,%d}=%.4f$' %   (i, j, param,))
+
+                    params_string = '\n'.join(params_string)
+                    params_string_mpl = '\n'.join(params_string_mpl)
+
+                    self.poly_coefficients_text.setText(params_string)
                     self.poly_chisquare = round(chisquare(histogram, pd_fit_poly, len(params_poly)), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", self.poly_chisquare)
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", self.poly_chisquare, params_string_mpl, fontsize=10)
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
 
                 if self.IS_DEVELOP: raise e
 
-    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare):
-        dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, parent=self)
+    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare, params, fontsize=14):
+        dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, params,
+                                     file_name=None if self.autosave==0 else self.autosave_file_name,
+                                     fontsize=fontsize,
+                                     parent=self)
         dialog.show()
 
     def load_partial_results(self):
-        file_name = self.autosave_file_name
+        file_name = None if self.autosave==0 else self.autosave_file_name
 
         if not file_name is None:
             plot_file = ShadowPlot.PlotXYHdf5File(congruence.checkDir(file_name), mode="r")
@@ -1764,36 +1801,65 @@ from matplotlib import cm
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
+from matplotlib import gridspec
+
+
 class ShowFitResultDialog(QDialog):
 
-    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, parent=None):
+    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, params_string, file_name=None, fontsize=14, parent=None):
         QDialog.__init__(self, parent)
         self.setWindowTitle('Fit Result')
         layout = QVBoxLayout(self)
 
+        self.file_name = None if file_name is None else congruence.checkDir(os.path.splitext(file_name)[0] + "_fit.png")
+
         figure = Figure(figsize=(4, 8))
         figure.patch.set_facecolor('white')
 
-        ax = figure.add_subplot(1, 1, 1, projection='3d')
+        gs = gridspec.GridSpec(1, 2, width_ratios=[1, 3])
+        ax = [None, None]
+        ax[0] = figure.add_subplot(gs[0])
+        ax[1] = figure.add_subplot(gs[1], projection='3d')
+
+        ax[0].axis('off')
+        ax[0].set_title("Fit Parameters")
+        ax[0].text(-0.2, 0.95, params_string,
+                   transform=ax[0].transAxes,
+                   fontsize=fontsize,
+                   verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         x_to_plot, y_to_plot = numpy.meshgrid(xx, yy)
 
-        ax.plot_surface(x_to_plot, y_to_plot, pd,
+        ax[1].plot_surface(x_to_plot, y_to_plot, pd,
                         rstride=1, cstride=1, cmap=cm.coolwarm, linewidth=0.5, antialiased=True, alpha=0.25)
 
-        ax.plot_surface(x_to_plot, y_to_plot, pd_fit,
+        ax[1].plot_surface(x_to_plot, y_to_plot, pd_fit,
                         rstride=1, cstride=1, cmap=cm.Blues, linewidth=0.5, antialiased=True, alpha=0.75)
 
-        ax.set_title(algorithm + " Fit\n\u03c7\u00b2 (RSS/\u03bd): " + str(chisquare))
-        ax.set_xlabel("H [mm]")
-        ax.set_ylabel("V [mm]")
-        ax.set_zlabel("Power Density [W/mm\u00b2]")
-        ax.mouse_init()
+        ax[1].set_title(algorithm + " Fit\n\u03c7\u00b2 (RSS/\u03bd): " + str(chisquare))
+        ax[1].set_xlabel("H [mm]")
+        ax[1].set_ylabel("V [mm]")
+        ax[1].set_zlabel("Power Density [W/mm\u00b2]")
+        ax[1].axes.mouse_init()
 
         figure_canvas = FigureCanvasQTAgg(figure)
 
-        bbox = QDialogButtonBox(QDialogButtonBox.Ok)
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Save)
+        self.buttonBox.accepted.connect(self.save)
+        self.buttonBox.rejected.connect(self.reject)
 
-        bbox.accepted.connect(self.accept)
         layout.addWidget(figure_canvas)
-        layout.addWidget(bbox)
+        layout.addWidget(self.buttonBox)
+
+        self.figure = figure
+
+    def save(self):
+        file_name = oasysgui.selectSaveFileFromDialog(self, "Select File", default_file_name=("" if self.file_name is None else self.file_name), file_extension_filter="PNG Files (*.png)")
+
+        if not file_name is None and not file_name.strip() == "":
+            try:
+                self.figure.savefig(file_name)
+                QMessageBox.information(self, "Save", "Fit plot saved on file " + file_name, QMessageBox.Ok)
+            except Exception as e: QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
