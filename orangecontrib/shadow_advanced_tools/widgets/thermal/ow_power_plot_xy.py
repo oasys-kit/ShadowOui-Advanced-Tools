@@ -912,13 +912,16 @@ class PowerPlotXY(AutomaticElement):
                                                       file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
 
         if not file_name is None and not file_name.strip()=="":
-            format, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", ("Hdf5", "Text", "Ansys", "Image", "All"), 4, False)
+            format, ok = QInputDialog.getItem(self, "Select Output Format", "Formats: ", ("Hdf5", "Text", "Ansys", "Image", "Hdf5 & Image", "All"), 4, False)
 
             if ok and format:
                 if format == "Hdf5" or format == "All":  self.save_cumulated_data_hdf5(file_name)
                 if format == "Text" or format == "All":  self.save_cumulated_data_txt(file_name)
                 if format == "Ansys" or format == "All": self.save_cumulated_data_ansys(file_name)
                 if format == "Image" or format == "All": self.save_cumulated_data_image(file_name)
+                if format == "Hdf5 & Image":
+                    self.save_cumulated_data_ansys(file_name)
+                    self.save_cumulated_data_image(file_name)
 
     def save_cumulated_data_hdf5(self, file_name):
         if not self.plotted_ticket is None:
