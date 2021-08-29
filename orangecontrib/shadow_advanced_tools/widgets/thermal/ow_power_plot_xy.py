@@ -920,7 +920,7 @@ class PowerPlotXY(AutomaticElement):
                 if format == "Ansys" or format == "All": self.save_cumulated_data_ansys(file_name)
                 if format == "Image" or format == "All": self.save_cumulated_data_image(file_name)
                 if format == "Hdf5 & Image":
-                    self.save_cumulated_data_ansys(file_name)
+                    self.save_cumulated_data_hdf5(file_name)
                     self.save_cumulated_data_image(file_name)
 
     def save_cumulated_data_hdf5(self, file_name):
