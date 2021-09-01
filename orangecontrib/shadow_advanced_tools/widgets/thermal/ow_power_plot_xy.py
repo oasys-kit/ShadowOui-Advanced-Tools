@@ -1246,19 +1246,26 @@ class PowerPlotXY(AutomaticElement):
                 h_coord = ticket["bin_h_center"]
                 v_coord = ticket["bin_v_center"]
 
+                pixel_area_original = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+                integral_original   = numpy.sum(histogram)
+
                 h_coord, v_coord, histogram = rebin(h_coord, v_coord, histogram, (int(self.new_nbins_h), int(self.new_nbins_v)))
 
-                ticket["histogram"] = histogram
-                ticket["bin_h_center"] = h_coord
-                ticket["bin_v_center"] = v_coord
-
-                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+                pixel_area_rebin = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
 
                 if self.plot_canvas is None:
                     self.plot_canvas = PowerPlotXYWidget()
                     self.image_box.layout().addWidget(self.plot_canvas)
 
-                cumulated_power_plot = numpy.sum(histogram) * pixel_area
+                integral_rebin = numpy.sum(histogram)
+
+                histogram *= (integral_original * pixel_area_original) / (integral_rebin * pixel_area_rebin) # rinormalization
+
+                cumulated_power_plot = numpy.sum(histogram) * pixel_area_rebin
+
+                ticket["histogram"] = histogram
+                ticket["bin_h_center"] = h_coord
+                ticket["bin_v_center"] = v_coord
 
                 try:
                     energy_min = ticket["energy_min"]
