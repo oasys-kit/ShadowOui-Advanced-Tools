@@ -45,9 +45,8 @@
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # #########################################################################
 
+import sys
 import numpy
-from numpy.matlib import repmat
-from scipy.signal import convolve2d
 
 from silx.gui.plot import Plot2D
 
@@ -61,7 +60,7 @@ from orangewidget.settings import Setting
 from oasys.widgets import gui as oasysgui
 from oasys.widgets import congruence
 from orangewidget import widget
-from oasys.util.oasys_util import TriggerOut, EmittingStream, get_fwhm, get_sigma
+from oasys.util.oasys_util import TriggerOut, EmittingStream
 
 from syned.beamline.beamline import Beamline
 from syned.beamline.optical_elements.absorbers.slit import Slit
@@ -69,25 +68,18 @@ from syned.storage_ring.light_source import LightSource
 from syned.widget.widget_decorator import WidgetDecorator
 from syned.beamline.shape import Rectangle
 
-from srxraylib.util.inverse_method_sampler import Sampler2D
-
-from orangecontrib.shadow.util.shadow_objects import ShadowBeam, ShadowSource
-from orangecontrib.shadow.util.shadow_util import ShadowPhysics
+from orangecontrib.shadow.util.shadow_objects import ShadowBeam
 
 from orangecontrib.shadow.widgets.gui.ow_generic_element import GenericElement
-
-from oasys.util.random_distributions import Distribution2D, Grid2D, distribution_from_grid
-from oasys.util.custom_distribution import CustomDistribution
 
 import scipy.constants as codata
 
 m2ev = codata.c * codata.h / codata.e
 
-from oasys_srw.srwlib import *
-from oasys_srw.srwlib import array as srw_array
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+
+from orangecontrib.shadow_advanced_tools.widgets.sources.bl import hybrid_undulator_bl as BL
 
 VERTICAL = 1
 HORIZONTAL = 2
@@ -755,7 +747,7 @@ class HybridUndulator(GenericElement):
 
     def setDataX(self):
         source_dimension_wf_h_slit_points, \
-        source_dimension_wf_h_slit_gap = self.get_source_slit_data(direction="h")
+        source_dimension_wf_h_slit_gap = BL.get_source_slit_data(self, direction="h")
 
         x2 = 0.5 * source_dimension_wf_h_slit_gap
         x1 = -x2
@@ -764,7 +756,7 @@ class HybridUndulator(GenericElement):
 
     def setDataY(self):
         source_dimension_wf_v_slit_points, \
-        source_dimension_wf_v_slit_gap = self.get_source_slit_data(direction="v")
+        source_dimension_wf_v_slit_gap = BL.get_source_slit_data(self, direction="v")
 
         y2 = 0.5 * source_dimension_wf_v_slit_gap
         y1 = -y2
@@ -789,10 +781,7 @@ class HybridUndulator(GenericElement):
         self.left_box_3_2.setVisible(self.type_of_initialization!=1)
 
     def set_z0Default(self):
-        self.moment_z = self.get_default_initial_z()
-
-    def get_default_initial_z(self):
-        return self.longitudinal_central_position-0.5*self.undulator_period*(self.number_of_periods + 8) # initial Longitudinal Coordinate (set before the ID)
+        self.moment_z = BL.get_default_initial_z(self)
 
     def auto_set_undulator_V(self):
         self.auto_set_undulator(VERTICAL)
@@ -811,7 +800,7 @@ class HybridUndulator(GenericElement):
         congruence.checkStrictlyPositiveNumber(self.undulator_period, "Period Length")
 
         wavelength = self.auto_harmonic_number*m2ev/self.auto_energy
-        K = round(numpy.sqrt(2*(((wavelength*2*self.gamma()**2)/self.undulator_period)-1)), 6)
+        K = round(numpy.sqrt(2*(((wavelength*2*BL.gamma(self)**2)/self.undulator_period)-1)), 6)
 
         if which == VERTICAL:
             self.Kv = K
@@ -860,7 +849,7 @@ class HybridUndulator(GenericElement):
 
     def set_harmonic_energy(self):
         if self.distribution_source==0 and self.use_harmonic==0:
-            self.harmonic_energy = round(self.resonance_energy(harmonic=self.harmonic_number), 2)
+            self.harmonic_energy = round(BL.resonance_energy(self, harmonic=self.harmonic_number), 2)
         else:
             self.harmonic_energy = numpy.nan
 
@@ -932,6 +921,9 @@ class HybridUndulator(GenericElement):
     def selectZDivergencesFile(self):
         self.le_z_divergences_file.setText(oasysgui.selectFileFromDialog(self, self.z_divergences_file, "Open Z Divergences File", file_extension_filter="*.dat, *.txt"))
 
+    def set_which_waist(self):
+        BL.set_which_waist(self)
+
     ####################################################################################
     # SYNED
     ####################################################################################
@@ -989,157 +981,12 @@ class HybridUndulator(GenericElement):
         sys.stdout = EmittingStream(textWritten=self.writeStdOut)
 
         try:
-            self.checkFields()
-
-            ###########################################
-            # TODO: TO BE ADDED JUST IN CASE OF BROKEN
-            #       ENVIRONMENT: MUST BE FOUND A PROPER WAY
-            #       TO TEST SHADOW
-            self.fixWeirdShadowBug()
-            ###########################################
-
-            shadow_src = ShadowSource.create_src()
-
-            self.populateFields(shadow_src)
-
-            self.progressBarSet(10)
-
-            self.setStatusMessage("Running SHADOW")
-
-            write_begin_file, write_start_file, write_end_file = self.get_write_file_options()
-
-            beam_out = ShadowBeam.traceFromSource(shadow_src,
-                                                  write_begin_file=write_begin_file,
-                                                  write_start_file=write_start_file,
-                                                  write_end_file=write_end_file)
-
-            self.fix_Intensity(beam_out)
-
-            self.progressBarSet(20)
-
-            if self.use_harmonic == 2:
-                energy_points = int(self.energy_points)
-                x_array = numpy.full(energy_points, None)
-                z_array = numpy.full(energy_points, None)
-                intensity_source_dimension_array = numpy.full(energy_points, None)
-                x_first_array = numpy.full(energy_points, None)
-                z_first_array = numpy.full(energy_points, None)
-                intensity_angular_distribution_array = numpy.full(energy_points, None)
-                integrated_flux_array = numpy.zeros(energy_points)
-                nr_rays_array = numpy.zeros(energy_points)
-                energies = numpy.linspace(self.energy, self.energy_to, energy_points)
-                prog_bars = numpy.linspace(20, 50, energy_points)
-
-                delta_e = energies[1] - energies[0]
-
-                for energy, i in zip(energies, range(energy_points)):
-                    self.setStatusMessage("Running SRW for energy: " + str(energy))
-
-                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, _ = self.runSRWCalculation(energy, False)
-
-                    x_array[i] = x
-                    z_array[i] = z
-                    intensity_source_dimension_array[i] = intensity_source_dimension
-                    x_first_array[i] = x_first
-                    z_first_array[i] = z_first
-                    intensity_angular_distribution_array[i] = intensity_angular_distribution
-                    integrated_flux_array[i] = integrated_flux * delta_e / (0.001 * energy) # switch to BW = energy step
-                    nr_rays_array[i] = self.number_of_rays * integrated_flux_array[i]
-
-                    self.progressBarSet(prog_bars[i])
-
-                nr_rays_array /= numpy.sum(integrated_flux_array)
-
-                first_index = 0
-                prog_bars = numpy.linspace(50, 80, energy_points)
-                current_seed = 0 if self.seed == 0 else self.seed
-                random.seed(current_seed)
-
-                for energy, i in zip(energies, range(energy_points)):
-                    last_index = min(first_index + int(nr_rays_array[i]), len(beam_out._beam.rays))
-
-                    temp_beam = ShadowBeam()
-                    temp_beam._beam.rays = beam_out._beam.rays[first_index:last_index]
-
-                    temp_beam._beam.rays[:, 10] = ShadowPhysics.getShadowKFromEnergy(numpy.random.uniform(energy, energy + delta_e, size=len(temp_beam._beam.rays)))
-
-                    self.setStatusMessage("Applying new Spatial/Angular Distribution for energy: " + str(energy))
-
-                    self.generate_user_defined_distribution_from_srw(beam_out=temp_beam,
-                                                                     coord_x=x_array[i],
-                                                                     coord_z=z_array[i],
-                                                                     intensity=intensity_source_dimension_array[i],
-                                                                     distribution_type=Distribution.POSITION,
-                                                                     kind_of_sampler=self.kind_of_sampler,
-                                                                     seed=current_seed + 1)
-
-                    self.generate_user_defined_distribution_from_srw(beam_out=temp_beam,
-                                                                     coord_x=x_first_array[i],
-                                                                     coord_z=z_first_array[i],
-                                                                     intensity=intensity_angular_distribution_array[i],
-                                                                     distribution_type=Distribution.DIVERGENCE,
-                                                                     kind_of_sampler=self.kind_of_sampler,
-                                                                     seed=current_seed + 2)
-
-                    self.progressBarSet(prog_bars[i])
-                    current_seed += 2
-                    first_index = last_index
-
-                if not last_index == len(beam_out._beam.rays):
-                    excluded_rays = beam_out._beam.rays[last_index:]
-                    excluded_rays[:, 9] = -999
-
-                beam_out.set_initial_flux(None)
-            else:
-                integrated_flux = None
-
-                energy = self.energy if self.use_harmonic == 1 else self.resonance_energy(harmonic=self.harmonic_number)
-
-                if self.distribution_source == 0:
-                    self.setStatusMessage("Running SRW")
-
-                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power = self.runSRWCalculation(energy, do_cumulated_calculations)
-                elif self.distribution_source == 1:
-                    self.setStatusMessage("Loading SRW files")
-
-                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution = self.loadSRWFiles()
-                elif self.distribution_source == 2: # ASCII FILES
-                    self.setStatusMessage("Loading Ascii files")
-
-                    x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution = self.loadASCIIFiles()
-
-                beam_out.set_initial_flux(integrated_flux)
-
-                self.progressBarSet(50)
-
-                self.setStatusMessage("Applying new Spatial/Angular Distribution")
-
-                self.progressBarSet(60)
-
-                self.generate_user_defined_distribution_from_srw(beam_out=beam_out,
-                                                                 coord_x=x,
-                                                                 coord_z=z,
-                                                                 intensity=intensity_source_dimension,
-                                                                 distribution_type=Distribution.POSITION,
-                                                                 kind_of_sampler=self.kind_of_sampler,
-                                                                 seed=0 if self.seed==0 else self.seed+1)
-
-                self.progressBarSet(70)
-
-                self.generate_user_defined_distribution_from_srw(beam_out=beam_out,
-                                                                 coord_x=x_first,
-                                                                 coord_z=z_first,
-                                                                 intensity=intensity_angular_distribution,
-                                                                 distribution_type=Distribution.DIVERGENCE,
-                                                                 kind_of_sampler=self.kind_of_sampler,
-                                                                 seed=0 if self.seed==0 else self.seed+2)
-
-            if self.distribution_source == 0 and self.is_canted_undulator() and self.waist_position != 0.0:
-                beam_out._beam.retrace(-self.waist_position/self.workspace_units_to_m) # put the beam at the center of the ID
+            beam_out, total_power = BL.run_hybrid_undulator_simulation(self, do_cumulated_calculations)
 
             self.setStatusMessage("Plotting Results")
 
             self.progressBarSet(80)
+
             self.plot_results(beam_out)
             self.plot_cumulated_results(do_cumulated_calculations)
 
@@ -1150,13 +997,12 @@ class HybridUndulator(GenericElement):
 
                 additional_parameters["total_power"]        = total_power
                 additional_parameters["photon_energy_step"] = self.energy_step
-                additional_parameters["current_step"] = self.current_step
-                additional_parameters["total_steps"] = self.total_steps
+                additional_parameters["current_step"]       = self.current_step
+                additional_parameters["total_steps"]        = self.total_steps
 
                 beam_out.setScanningData(ShadowBeam.ScanningData("photon_energy", self.energy, "Energy for Power Calculation", "eV", additional_parameters))
 
-            if self.file_to_write_out > 0:
-                beam_out._beam.write("begin.dat")
+            if self.file_to_write_out > 0: beam_out._beam.write("begin.dat")
 
             self.send("Beam", beam_out)
         except Exception as exception:
@@ -1281,78 +1127,6 @@ class HybridUndulator(GenericElement):
 
             self.runShadowSource(do_cumulated_calculations)
 
-    def checkFields(self):
-        self.number_of_rays = congruence.checkPositiveNumber(self.number_of_rays, "Number of rays")
-        self.seed = congruence.checkPositiveNumber(self.seed, "Seed")
-
-        if self.use_harmonic == 0:
-            if self.distribution_source != 0: raise Exception("Harmonic Energy can be computed only for explicit SRW Calculation")
-
-            self.harmonic_number = congruence.checkStrictlyPositiveNumber(self.harmonic_number, "Harmonic Number")
-        elif self.use_harmonic == 2:
-            if self.distribution_source != 0: raise Exception("Energy Range can be computed only for explicit SRW Calculation")
-
-            self.energy        = congruence.checkStrictlyPositiveNumber(self.energy, "Photon Energy From")
-            self.energy_to     = congruence.checkStrictlyPositiveNumber(self.energy_to, "Photon Energy To")
-            self.energy_points = congruence.checkStrictlyPositiveNumber(self.energy_points, "Nr. Energy Values")
-            congruence.checkGreaterThan(self.energy_to, self.energy, "Photon Energy To", "Photon Energy From")
-        else:
-            self.energy = congruence.checkStrictlyPositiveNumber(self.energy, "Photon Energy")
-
-        if self.optimize_source > 0:
-            self.max_number_of_rejected_rays = congruence.checkPositiveNumber(self.max_number_of_rejected_rays,
-                                                                             "Max number of rejected rays")
-            congruence.checkFile(self.optimize_file_name)
-
-    def populateFields(self, shadow_src):
-        shadow_src.src.NPOINT = self.number_of_rays if self.auto_expand==0 else (self.number_of_rays if self.auto_expand_rays==0 else int(numpy.ceil(self.number_of_rays*1.1)))
-        shadow_src.src.ISTAR1 = self.seed
-        shadow_src.src.F_OPD = 1
-        shadow_src.src.F_SR_TYPE = 0
-
-        shadow_src.src.FGRID = 0
-        shadow_src.src.IDO_VX = 0
-        shadow_src.src.IDO_VZ = 0
-        shadow_src.src.IDO_X_S = 0
-        shadow_src.src.IDO_Y_S = 0
-        shadow_src.src.IDO_Z_S = 0
-
-        shadow_src.src.FSOUR = 0 # spatial_type (point)
-        shadow_src.src.FDISTR = 1 # angular_distribution (flat)
-
-        shadow_src.src.HDIV1 = -1.0e-6
-        shadow_src.src.HDIV2 = 1.0e-6
-        shadow_src.src.VDIV1 = -1.0e-6
-        shadow_src.src.VDIV2 = 1.0e-6
-
-        shadow_src.src.FSOURCE_DEPTH = 1 # OFF
-
-        shadow_src.src.F_COLOR = 1 # single value
-        shadow_src.src.F_PHOT = 0 # eV , 1 Angstrom
-
-        shadow_src.src.PH1 = self.energy if self.use_harmonic !=0 else self.resonance_energy(harmonic=self.harmonic_number)
-
-        shadow_src.src.F_POLAR = self.polarization
-
-        if self.polarization == 1:
-            shadow_src.src.F_COHER = self.coherent_beam
-            shadow_src.src.POL_ANGLE = self.phase_diff
-            shadow_src.src.POL_DEG = self.polarization_degree
-
-        shadow_src.src.F_OPD = 1
-        shadow_src.src.F_BOUND_SOUR = self.optimize_source
-        if self.optimize_source > 0:
-            shadow_src.src.FILE_BOUND = bytes(congruence.checkFileName(self.optimize_file_name), 'utf-8')
-        shadow_src.src.NTOTALPOINT = self.max_number_of_rejected_rays
-
-    # WEIRD MEMORY INITIALIZATION BY FORTRAN. JUST A FIX.
-    def fix_Intensity(self, beam_out):
-        if self.polarization == 0:
-            for index in range(0, len(beam_out._beam.rays)):
-                beam_out._beam.rays[index, 15] = 0
-                beam_out._beam.rays[index, 16] = 0
-                beam_out._beam.rays[index, 17] = 0
-
     def cumulated_plot_data1D(self, dataX, dataY, plot_canvas_index, title="", xtitle="", ytitle=""):
         if self.cumulated_plot_canvas[plot_canvas_index] is None:
             self.cumulated_plot_canvas[plot_canvas_index] = oasysgui.plotWindow()
@@ -1431,708 +1205,4 @@ class HybridUndulator(GenericElement):
                 self.cumulated_view_type_combo.setEnabled(True)
 
                 raise Exception("Data not plottable: exception: " + str(e))
-
-    ####################################################################################
-    # SRW CALCULATION
-    ####################################################################################
-
-    def checkSRWFields(self):
-
-        congruence.checkPositiveNumber(self.Kh, "Horizontal K")
-        congruence.checkPositiveNumber(self.Kv, "Vertical K")
-        congruence.checkStrictlyPositiveNumber(self.undulator_period, "Period Length")
-        congruence.checkStrictlyPositiveNumber(self.number_of_periods, "Number of Periods")
-
-        congruence.checkStrictlyPositiveNumber(self.electron_energy_in_GeV, "Energy")
-        congruence.checkPositiveNumber(self.electron_energy_spread, "Energy Spread")
-        congruence.checkStrictlyPositiveNumber(self.ring_current, "Ring Current")
-
-        congruence.checkPositiveNumber(self.electron_beam_size_h       , "Horizontal Beam Size")
-        congruence.checkPositiveNumber(self.electron_beam_divergence_h , "Vertical Beam Size")
-        congruence.checkPositiveNumber(self.electron_beam_size_v       , "Horizontal Beam Divergence")
-        congruence.checkPositiveNumber(self.electron_beam_divergence_v , "Vertical Beam Divergence")
-
-
-        congruence.checkStrictlyPositiveNumber(self.source_dimension_wf_h_slit_gap, "Wavefront Propagation H Slit Gap")
-        congruence.checkStrictlyPositiveNumber(self.source_dimension_wf_v_slit_gap, "Wavefront Propagation V Slit Gap")
-        congruence.checkStrictlyPositiveNumber(self.source_dimension_wf_h_slit_points, "Wavefront Propagation H Slit Points")
-        congruence.checkStrictlyPositiveNumber(self.source_dimension_wf_v_slit_points, "Wavefront Propagation V Slit Points")
-        congruence.checkGreaterOrEqualThan(self.source_dimension_wf_distance, self.get_minimum_propagation_distance(),
-                                           "Wavefront Propagation Distance", "Minimum Distance out of the Source: " + str(self.get_minimum_propagation_distance()))
-
-        if self.save_srw_result == 1:
-            congruence.checkDir(self.source_dimension_srw_file)
-            congruence.checkDir(self.angular_distribution_srw_file)
-
-    def get_minimum_propagation_distance(self):
-        return round(self.get_source_length()*1.01, 6)
-
-    def get_source_length(self):
-        return self.undulator_period*self.number_of_periods
-
-    def magnetic_field_from_K(self):
-        Bv = self.Kv * 2 * pi * codata.m_e * codata.c / (codata.e * self.undulator_period)
-        Bh = self.Kh * 2 * pi * codata.m_e * codata.c / (codata.e * self.undulator_period)
-
-        return Bv, Bh
-
-    def createUndulator(self, no_shift=False):
-        #***********Undulator
-        if self.magnetic_field_from == 0:
-            By, Bx = self.magnetic_field_from_K() #Peak Vertical field [T]
-        else:
-            By = self.Bv
-            Bx = self.Bh
-
-        symmetry_vs_longitudinal_position_horizontal = 1 if self.symmetry_vs_longitudinal_position_horizontal == 0 else -1
-        symmetry_vs_longitudinal_position_vertical = 1 if self.symmetry_vs_longitudinal_position_vertical == 0 else -1
-
-        und = SRWLMagFldU([SRWLMagFldH(1, 'h',
-                                       _B=Bx,
-                                       _ph=self.initial_phase_horizontal,
-                                       _s=symmetry_vs_longitudinal_position_horizontal,
-                                       _a=1.0),
-                           SRWLMagFldH(1, 'v',
-                                       _B=By,
-                                       _ph=self.initial_phase_vertical,
-                                       _s=symmetry_vs_longitudinal_position_vertical,
-                                       _a=1)],
-                          self.undulator_period, self.number_of_periods) #Planar Undulator
-
-        if no_shift:
-            magFldCnt = SRWLMagFldC(_arMagFld=[und],
-                                    _arXc = array('d', [0.0]),
-                                    _arYc = array('d', [0.0]),
-                                    _arZc = array('d', [0.0])) #Container of all Field Elements
-        else:
-            magFldCnt = SRWLMagFldC(_arMagFld=[und],
-                                    _arXc = array('d', [self.horizontal_central_position]),
-                                    _arYc = array('d', [self.vertical_central_position]),
-                                    _arZc = array('d', [self.longitudinal_central_position]))#Container of all Field Elements
-
-        return magFldCnt
-
-    def createElectronBeam(self, distribution_type=Distribution.DIVERGENCE, position=0.0, use_nominal=False):
-        #***********Electron Beam
-        elecBeam = SRWLPartBeam()
-
-        electron_beam_size_h = self.electron_beam_size_h if use_nominal else \
-            numpy.sqrt(self.electron_beam_size_h ** 2 + (numpy.abs(self.longitudinal_central_position + position) * numpy.tan(self.electron_beam_divergence_h)) ** 2)
-        electron_beam_size_v = self.electron_beam_size_v if use_nominal else \
-            numpy.sqrt(self.electron_beam_size_v ** 2 + (numpy.abs(self.longitudinal_central_position + position) * numpy.tan(self.electron_beam_divergence_v)) ** 2)
-
-        if self.type_of_initialization == 0: # zero
-            self.moment_x = 0.0
-            self.moment_y = 0.0
-            self.moment_z = self.get_default_initial_z()
-            self.moment_xp = 0.0
-            self.moment_yp = 0.0
-        elif self.type_of_initialization == 2: # sampled
-            self.moment_x = numpy.random.normal(0.0, electron_beam_size_h)
-            self.moment_y = numpy.random.normal(0.0, electron_beam_size_v)
-            self.moment_z = self.get_default_initial_z()
-            self.moment_xp = numpy.random.normal(0.0, self.electron_beam_divergence_h)
-            self.moment_yp = numpy.random.normal(0.0, self.electron_beam_divergence_v)
-
-        elecBeam.partStatMom1.x = self.moment_x
-        elecBeam.partStatMom1.y = self.moment_y
-        elecBeam.partStatMom1.z = self.moment_z
-        elecBeam.partStatMom1.xp = self.moment_xp
-        elecBeam.partStatMom1.yp = self.moment_yp
-        elecBeam.partStatMom1.gamma = self.gamma()
-
-        elecBeam.Iavg = self.ring_current #Average Current [A]
-
-        #2nd order statistical moments
-        elecBeam.arStatMom2[0] = 0 if distribution_type==Distribution.DIVERGENCE else (electron_beam_size_h)**2 #<(x-x0)^2>
-        elecBeam.arStatMom2[1] = 0
-        elecBeam.arStatMom2[2] = (self.electron_beam_divergence_h)**2 #<(x'-x'0)^2>
-        elecBeam.arStatMom2[3] = 0 if distribution_type==Distribution.DIVERGENCE else (electron_beam_size_v)**2 #<(y-y0)^2>
-        elecBeam.arStatMom2[4] = 0
-        elecBeam.arStatMom2[5] = (self.electron_beam_divergence_v)**2 #<(y'-y'0)^2>
-        # energy spread
-        elecBeam.arStatMom2[10] = (self.electron_energy_spread)**2 #<(E-E0)^2>/E0^2
-
-        return elecBeam
-
-    def get_source_slit_data(self, direction="b"):
-        if self.auto_expand==1:
-            source_dimension_wf_h_slit_points = int(numpy.ceil(0.55*self.source_dimension_wf_h_slit_points)*2)
-            source_dimension_wf_v_slit_points = int(numpy.ceil(0.55*self.source_dimension_wf_v_slit_points)*2)
-            source_dimension_wf_h_slit_gap = self.source_dimension_wf_h_slit_gap*1.1
-            source_dimension_wf_v_slit_gap = self.source_dimension_wf_v_slit_gap*1.1
-        else:
-            source_dimension_wf_h_slit_points = self.source_dimension_wf_h_slit_points
-            source_dimension_wf_v_slit_points = self.source_dimension_wf_v_slit_points
-            source_dimension_wf_h_slit_gap = self.source_dimension_wf_h_slit_gap
-            source_dimension_wf_v_slit_gap = self.source_dimension_wf_v_slit_gap
-
-        if direction=="h":   return source_dimension_wf_h_slit_points, source_dimension_wf_h_slit_gap
-        elif direction=="v": return source_dimension_wf_v_slit_points, source_dimension_wf_v_slit_gap
-        else:                return source_dimension_wf_h_slit_points, source_dimension_wf_h_slit_gap, source_dimension_wf_v_slit_points, source_dimension_wf_v_slit_gap
-
-    def createInitialWavefrontMesh(self, elecBeam, energy):
-        #****************** Initial Wavefront
-        wfr = SRWLWfr() #For intensity distribution at fixed photon energy
-
-        source_dimension_wf_h_slit_points, \
-        source_dimension_wf_h_slit_gap, \
-        source_dimension_wf_v_slit_points, \
-        source_dimension_wf_v_slit_gap = self.get_source_slit_data(direction="b")
-
-        wfr.allocate(1, source_dimension_wf_h_slit_points, source_dimension_wf_v_slit_points) #Numbers of points vs Photon Energy, Horizontal and Vertical Positions
-        wfr.mesh.zStart = self.source_dimension_wf_distance + self.longitudinal_central_position #Longitudinal Position [m] from Center of Straight Section at which SR has to be calculated
-        wfr.mesh.eStart = energy  #Initial Photon Energy [eV]
-        wfr.mesh.eFin = wfr.mesh.eStart #Final Photon Energy [eV]
-
-        wfr.mesh.xStart = -0.5*source_dimension_wf_h_slit_gap #Initial Horizontal Position [m]
-        wfr.mesh.xFin = -1 * wfr.mesh.xStart #0.00015 #Final Horizontal Position [m]
-        wfr.mesh.yStart = -0.5*source_dimension_wf_v_slit_gap #Initial Vertical Position [m]
-        wfr.mesh.yFin = -1 * wfr.mesh.yStart#0.00015 #Final Vertical Position [m]
-
-        wfr.partBeam = elecBeam
-
-        return wfr
-
-    def calculate_automatic_waste_position(self, energy):
-        magFldCnt = self.createUndulator(no_shift=True)
-        arPrecParSpec = self.createCalculationPrecisionSettings()
-
-        undulator_length = self.number_of_periods * self.undulator_period
-        wavelength       = (codata.h * codata.c / codata.e)/energy
-
-        gauss_sigma_ph  = numpy.sqrt(2*wavelength*undulator_length)/(2*numpy.pi)
-        gauss_sigmap_ph = numpy.sqrt(wavelength/(2*undulator_length))
-
-        positions     = numpy.linspace(start=-0.5*undulator_length, stop=0.5*undulator_length, num=self.number_of_waist_fit_points)
-        sizes_e_x     = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_e_y     = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_ph_x    = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_ph_y    = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_ph_an_x = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_ph_an_y = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_tot_x   = numpy.zeros(self.number_of_waist_fit_points)
-        sizes_tot_y   = numpy.zeros(self.number_of_waist_fit_points)
-
-
-        for i in range(self.number_of_waist_fit_points):
-            position = positions[i]
-
-            elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION, position=position, use_nominal=False)
-            elecBeam_Ph = self.createElectronBeam(distribution_type=Distribution.POSITION, use_nominal=True)
-            wfr         = self.createInitialWavefrontMesh(elecBeam_Ph, energy)
-            optBLSouDim = self.createBeamlineSourceDimension(back_position=(self.source_dimension_wf_distance + self.longitudinal_central_position - position),
-                                                             waist_calculation=self.waist_back_propagation_parameters==1)
-
-            srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
-            srwl.PropagElecField(wfr, optBLSouDim)
-
-            arI = array('f', [0] * wfr.mesh.nx * wfr.mesh.ny)  # "flat" 2D array to take intensity data
-            srwl.CalcIntFromElecField(arI, wfr, 6, 0, 3, wfr.mesh.eStart, 0, 0) # SINGLE ELECTRON!
-
-            x, y, intensity_distribution = self.transform_srw_array(arI, wfr.mesh)
-
-            def get_size(position, coord, intensity_distribution, projection_axis, ebeam_index):
-                sigma_e  = numpy.sqrt(elecBeam.arStatMom2[ebeam_index])
-                histo    = numpy.sum(intensity_distribution, axis=projection_axis)
-                sigma    = get_sigma(histo, coord) if self.use_sigma_or_fwhm==0 else get_fwhm(histo, coord)[0]/2.355
-                sigma_an = numpy.sqrt(gauss_sigma_ph**2 + (position*numpy.tan(gauss_sigmap_ph))**2)
-
-                if numpy.isnan(sigma): sigma = 0.0
-
-                return sigma_e, sigma, sigma_an, numpy.sqrt(sigma**2 + sigma_e**2)
-
-            sizes_e_x[i], sizes_ph_x[i], sizes_ph_an_x[i], sizes_tot_x[i] = get_size(position, x, intensity_distribution, 1, 0)
-            sizes_e_y[i], sizes_ph_y[i], sizes_ph_an_y[i], sizes_tot_y[i] = get_size(position, y, intensity_distribution, 0, 3)
-
-        def plot(direction, positions, sizes_e, sizes_ph, size_ph_an, sizes_tot, waist_position, waist_size):
-            self.waist_axes[direction].clear()
-            self.waist_axes[direction].set_title(("Horizontal" if direction == 0 else "Vertical") + " Direction\n" +
-                                                 "Source size: " + str(round(waist_size * 1e6, 2)) + " " + r'$\mu$' + "m \n" +
-                                                 "at " + str(round(waist_position * 1e3, 1)) + " mm from the ID center")
-
-            self.waist_axes[direction].plot(positions*1e3, sizes_e*1e6,   label='electron', color='g')
-            self.waist_axes[direction].plot(positions*1e3, sizes_ph*1e6,  label='photon', color='b')
-            self.waist_axes[direction].plot(positions*1e3, size_ph_an*1e6,  '--', label='photon (analytical)', color='b')
-            self.waist_axes[direction].plot(positions*1e3, sizes_tot*1e6, label='total', color='r')
-            self.waist_axes[direction].plot([waist_position*1e3], [waist_size*1e6], 'bo', label="waist")
-            self.waist_axes[direction].set_xlabel("Position relative to ID center [mm]")
-            self.waist_axes[direction].set_ylabel("Sigma [um]")
-            self.waist_axes[direction].legend()
-
-        def get_minimum(positions, sizes):
-            coeffiecients = numpy.polyfit(positions, sizes, deg=self.degree_of_waist_fit)
-            p = numpy.poly1d(coeffiecients)
-            bounds = [positions[0], positions[-1]]
-
-            critical_points = numpy.array(bounds + [x for x in p.deriv().r if x.imag == 0 and bounds[0] < x.real < bounds[1]])
-            critical_sizes = p(critical_points)
-
-            minimum_value = numpy.inf
-            minimum_position = numpy.nan
-
-            for i in range(len(critical_points)):
-                if critical_sizes[i] <= minimum_value:
-                    minimum_value = critical_sizes[i]
-                    minimum_position = critical_points[i]
-
-            return minimum_position, minimum_value
-
-        waist_position_x, waist_size_x = get_minimum(positions, sizes_tot_x)
-        waist_position_y, waist_size_y = get_minimum(positions, sizes_tot_y)
-
-        plot(0, positions, sizes_e_x, sizes_ph_x, sizes_ph_an_x, sizes_tot_x, waist_position_x, waist_size_x)
-        plot(1, positions, sizes_e_y, sizes_ph_y, sizes_ph_an_y, sizes_tot_y, waist_position_y, waist_size_y)
-
-        try:
-            self.waist_figure.draw()
-        except ValueError as e:
-            if "Image size of " in str(e): pass
-            else: raise e
-
-        return waist_position_x, waist_position_y
-
-    def createCalculationPrecisionSettings(self):
-        #***********Precision Parameters for SR calculation
-        meth = 1 #SR calculation method: 0- "manual", 1- "auto-undulator", 2- "auto-wiggler"
-        relPrec = 0.01 #relative precision
-        zStartInteg = 0 #longitudinal position to start integration (effective if < zEndInteg)
-        zEndInteg = 0 #longitudinal position to finish integration (effective if > zStartInteg)
-        npTraj = 100000 #Number of points for trajectory calculation
-        useTermin = 1 #Use "terminating terms" (i.e. asymptotic expansions at zStartInteg and zEndInteg) or not (1 or 0 respectively)
-        # This is the convergence parameter. Higher is more accurate but slower!!
-        sampFactNxNyForProp = 0.0 #0.6 #sampling factor for adjusting nx, ny (effective if > 0)
-
-        return [meth, relPrec, zStartInteg, zEndInteg, npTraj, useTermin, sampFactNxNyForProp]
-
-    def createBeamlineSourceDimension(self, back_position=0.0, waist_calculation=False):
-        #***************** Optical Elements and Propagation Parameters
-
-        opDrift = SRWLOptD(-back_position) # back to waist position
-        if not waist_calculation:
-            ppDrift = [0, 0, 1., 1, 0,
-                       self.horizontal_range_modification_factor_at_resizing,
-                       self.horizontal_resolution_modification_factor_at_resizing,
-                       self.vertical_range_modification_factor_at_resizing,
-                       self.vertical_resolution_modification_factor_at_resizing,
-                       0, 0, 0]
-        else:
-            ppDrift = [0, 0, 1., 1, 0,
-                       self.waist_horizontal_range_modification_factor_at_resizing,
-                       self.waist_horizontal_resolution_modification_factor_at_resizing,
-                       self.waist_vertical_range_modification_factor_at_resizing,
-                       self.waist_vertical_resolution_modification_factor_at_resizing,
-                       0, 0, 0]
-
-        return SRWLOptC([opDrift],[ppDrift])
-
-
-    def transform_srw_array(self, output_array, mesh):
-        h_array = numpy.linspace(mesh.xStart, mesh.xFin, mesh.nx)
-        v_array = numpy.linspace(mesh.yStart, mesh.yFin, mesh.ny)
-
-        intensity_array = numpy.zeros((h_array.size, v_array.size))
-
-        tot_len = int(mesh.ny * mesh.nx)
-        len_output_array = len(output_array)
-
-        if len_output_array > tot_len:
-            output_array = numpy.array(output_array[0:tot_len])
-        elif len_output_array < tot_len:
-            aux_array = srw_array('d', [0] * len_output_array)
-            for i in range(len_output_array): aux_array[i] = output_array[i]
-            output_array = numpy.array(srw_array(aux_array))
-        else:
-            output_array = numpy.array(output_array)
-
-        output_array = output_array.reshape(mesh.ny, mesh.nx)
-
-        for ix in range(mesh.nx):
-            for iy in range(mesh.ny):
-                intensity_array[ix, iy] = output_array[iy, ix]
-
-        intensity_array[numpy.where(numpy.isnan(intensity_array))]=0.0
-
-        return h_array, v_array, intensity_array
-
-    def calculate_waist_position(self, energy):
-        if self.distribution_source == 0: # SRW calculation
-            if self.is_canted_undulator():
-                if self.waist_position_calculation == 0:  # None
-                    self.waist_position = 0.0
-                elif self.waist_position_calculation == 1:  # Automatic
-                    if self.use_harmonic == 2: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed when Photon Energy Setting: Range")
-                    if self.compute_power: raise ValueError("Automatic calculation of the waist position for canted undulator is not allowed while running a thermal load loop")
-
-                    self.waist_position_auto_h, self.waist_position_auto_v = self.calculate_automatic_waste_position(energy)
-
-                    self.set_which_waist()
-
-                    self.waist_position = self.waist_position_auto
-
-                elif self.waist_position_calculation == 2:  # User Defined
-                    congruence.checkNumber(self.waist_position_user_defined, "User Defined Waist Position")
-                    congruence.checkLessOrEqualThan(self.waist_position_user_defined, self.source_dimension_wf_distance, "Waist Position", "Propagation Distance")
-
-                    self.waist_position = self.waist_position_user_defined
-            else:
-                self.waist_position = 0.0
-        else:
-            self.waist_position = 0.0
-
-    def set_which_waist(self):
-        if self.which_waist == 0:  # horizontal
-            self.waist_position_auto = round(self.waist_position_auto_h, 4)
-        elif self.which_waist == 1:  # vertical
-            self.waist_position_auto = round(self.waist_position_auto_v, 4)
-        else:  # middle point
-            self.waist_position_auto = round(0.5 * (self.waist_position_auto_h + self.waist_position_auto_v), 4)
-
-    def runSRWCalculation(self, energy, do_cumulated_calculations=False):
-
-        self.checkSRWFields()
-
-        self.calculate_waist_position(energy)
-
-        magFldCnt = self.createUndulator()
-        elecBeam  = self.createElectronBeam(distribution_type=Distribution.DIVERGENCE, position=self.waist_position)
-        wfr       = self.createInitialWavefrontMesh(elecBeam, energy)
-
-        arPrecParSpec = self.createCalculationPrecisionSettings()
-
-        # 1 calculate intensity distribution ME convoluted for dimension size
-        srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
-
-        arI = array('f', [0]*wfr.mesh.nx*wfr.mesh.ny) #"flat" 2D array to take intensity data
-        srwl.CalcIntFromElecField(arI, wfr, 6, 1, 3, wfr.mesh.eStart, 0, 0)
-
-        # from radiation at the slit we can calculate Angular Distribution and Power
-
-        x, z, intensity_angular_distribution = self.transform_srw_array(arI, wfr.mesh)
-
-        dx = (x[1] - x[0]) * 1e3  # mm for power computations
-        dy = (z[1] - z[0]) * 1e3
-
-        integrated_flux = intensity_angular_distribution.sum()*dx*dy
-
-        if self.compute_power:
-            total_power = self.power_step if self.power_step > 0 else integrated_flux * (1e3 * self.energy_step * codata.e)
-        else:
-            total_power = None
-
-        if self.compute_power and do_cumulated_calculations:
-            current_energy          = numpy.ones(1) * energy
-            current_integrated_flux = numpy.ones(1) * integrated_flux
-            current_power_density   = intensity_angular_distribution.copy() * (1e3 * self.energy_step * codata.e)
-            current_power           = total_power
-
-            if self.cumulated_energies is None:
-                self.cumulated_energies        = current_energy
-                self.cumulated_integrated_flux = current_integrated_flux
-                self.cumulated_power_density   = current_power_density
-                self.cumulated_power           = numpy.ones(1) * (current_power)
-            else:
-                self.cumulated_energies        = numpy.append(self.cumulated_energies,  current_energy)
-                self.cumulated_integrated_flux = numpy.append(self.cumulated_integrated_flux,  current_integrated_flux)
-                self.cumulated_power_density  += current_power_density
-                self.cumulated_power           = numpy.append(self.cumulated_power,  numpy.ones(1) * (self.cumulated_power[-1] + current_power))
-
-        distance = self.source_dimension_wf_distance - self.waist_position # relative to the center of the undulator
-
-        x_first = numpy.arctan(x/distance)
-        z_first = numpy.arctan(z/distance)
-
-        wfrAngDist = self.createInitialWavefrontMesh(elecBeam, energy)
-        wfrAngDist.mesh.xStart = numpy.arctan(wfr.mesh.xStart/distance)
-        wfrAngDist.mesh.xFin   = numpy.arctan(wfr.mesh.xFin  /distance)
-        wfrAngDist.mesh.yStart = numpy.arctan(wfr.mesh.yStart/distance)
-        wfrAngDist.mesh.yFin   = numpy.arctan(wfr.mesh.yFin  /distance)
-
-        if self.save_srw_result == 1: srwl_uti_save_intens_ascii(arI, wfrAngDist.mesh, self.angular_distribution_srw_file)
-
-        # for source dimension, back propagation to the source position
-        elecBeam    = self.createElectronBeam(distribution_type=Distribution.POSITION, position=self.waist_position)
-        wfr         = self.createInitialWavefrontMesh(elecBeam, energy)
-        optBLSouDim = self.createBeamlineSourceDimension(back_position=(self.source_dimension_wf_distance - self.waist_position))
-
-        srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
-        srwl.PropagElecField(wfr, optBLSouDim)
-
-        arI = array('f', [0]*wfr.mesh.nx*wfr.mesh.ny) #"flat" 2D array to take intensity data
-        srwl.CalcIntFromElecField(arI, wfr, 6, 1, 3, wfr.mesh.eStart, 0, 0)
-
-        if self.save_srw_result == 1: srwl_uti_save_intens_ascii(arI, wfr.mesh, self.source_dimension_srw_file)
-
-        x, z, intensity_source_dimension = self.transform_srw_array(arI, wfr.mesh)
-
-        # SWITCH FROM SRW METERS TO SHADOWOUI U.M.
-        x /= self.workspace_units_to_m
-        z /= self.workspace_units_to_m
-
-        return x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power
-
-
-    def generate_user_defined_distribution_from_srw(self,
-                                                    beam_out,
-                                                    coord_x,
-                                                    coord_z,
-                                                    intensity,
-                                                    distribution_type=Distribution.POSITION,
-                                                    kind_of_sampler=1,
-                                                    seed=0):
-        if kind_of_sampler == 2:
-            s2d = Sampler2D(intensity, coord_x, coord_z)
-
-            samples_x, samples_z = s2d.get_n_sampled_points(len(beam_out._beam.rays))
-
-            if distribution_type == Distribution.POSITION:
-                beam_out._beam.rays[:, 0] = samples_x
-                beam_out._beam.rays[:, 2] = samples_z
-
-            elif distribution_type == Distribution.DIVERGENCE:
-                alpha_x = samples_x
-                alpha_z = samples_z
-
-                beam_out._beam.rays[:, 3] =  numpy.cos(alpha_z)*numpy.sin(alpha_x)
-                beam_out._beam.rays[:, 4] =  numpy.cos(alpha_z)*numpy.cos(alpha_x)
-                beam_out._beam.rays[:, 5] =  numpy.sin(alpha_z)
-        elif kind_of_sampler == 0:
-            pdf = numpy.abs(intensity/numpy.max(intensity))
-            pdf /= pdf.sum()
-
-            distribution = CustomDistribution(pdf, seed=seed)
-
-            sampled = distribution(len(beam_out._beam.rays))
-
-            min_value_x = numpy.min(coord_x)
-            step_x = numpy.abs(coord_x[1]-coord_x[0])
-            min_value_z = numpy.min(coord_z)
-            step_z = numpy.abs(coord_z[1]-coord_z[0])
-
-            if distribution_type == Distribution.POSITION:
-                beam_out._beam.rays[:, 0] = min_value_x + sampled[0, :]*step_x
-                beam_out._beam.rays[:, 2] = min_value_z + sampled[1, :]*step_z
-
-            elif distribution_type == Distribution.DIVERGENCE:
-                alpha_x = min_value_x + sampled[0, :]*step_x
-                alpha_z = min_value_z + sampled[1, :]*step_z
-
-                beam_out._beam.rays[:, 3] =  numpy.cos(alpha_z)*numpy.sin(alpha_x)
-                beam_out._beam.rays[:, 4] =  numpy.cos(alpha_z)*numpy.cos(alpha_x)
-                beam_out._beam.rays[:, 5] =  numpy.sin(alpha_z)
-        elif kind_of_sampler == 1:
-            min_x = numpy.min(coord_x)
-            max_x = numpy.max(coord_x)
-            delta_x = max_x - min_x
-
-            min_z = numpy.min(coord_z)
-            max_z = numpy.max(coord_z)
-            delta_z = max_z - min_z
-
-            dim_x = len(coord_x)
-            dim_z = len(coord_z)
-
-            grid = Grid2D((dim_x, dim_z))
-            grid[..., ...] = intensity.tolist()
-
-            d = Distribution2D(distribution_from_grid(grid, dim_x, dim_z), (0, 0), (dim_x, dim_z))
-
-            samples = d.get_samples(len(beam_out._beam.rays), seed)
-
-            if distribution_type == Distribution.POSITION:
-                beam_out._beam.rays[:, 0] = min_x + samples[:, 0] * delta_x
-                beam_out._beam.rays[:, 2] = min_z + samples[:, 1] * delta_z
-
-            elif distribution_type == Distribution.DIVERGENCE:
-                alpha_x = min_x + samples[:, 0] * delta_x
-                alpha_z = min_z + samples[:, 1] * delta_z
-
-                beam_out._beam.rays[:, 3] = numpy.cos(alpha_z) * numpy.sin(alpha_x)
-                beam_out._beam.rays[:, 4] = numpy.cos(alpha_z) * numpy.cos(alpha_x)
-                beam_out._beam.rays[:, 5] = numpy.sin(alpha_z)
-
-        else:
-            raise ValueError("Sampler not recognized")
-        
-    def gamma(self):
-        return 1e9*self.electron_energy_in_GeV / (codata.m_e *  codata.c**2 / codata.e)
-
-    def resonance_energy(self, theta_x=0.0, theta_z=0.0, harmonic=1):
-        gamma = self.gamma()
-
-        wavelength = (self.undulator_period / (2.0*gamma **2)) * \
-                     (1 + self.Kv**2 / 2.0 + self.Kh**2 / 2.0 + \
-                      gamma**2 * (theta_x**2 + theta_z ** 2))
-
-        wavelength /= harmonic
-
-        return m2ev/wavelength
-
-    ####################################################################################
-    # SRW FILES
-    ####################################################################################
-
-    def checkSRWFilesFields(self):
-        congruence.checkFile(self.source_dimension_srw_file)
-        congruence.checkFile(self.angular_distribution_srw_file)
-
-    def loadSRWFiles(self):
-
-        self.checkSRWFilesFields()
-
-        x, z, intensity_source_dimension = self.loadNumpyFormat(self.source_dimension_srw_file)
-        x_first, z_first, intensity_angular_distribution = self.loadNumpyFormat(self.angular_distribution_srw_file)
-
-
-        # SWITCH FROM SRW METERS TO SHADOWOUI U.M.
-        x = x/self.workspace_units_to_m
-        z = z/self.workspace_units_to_m
-
-        return x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution
-
-
-    def file_load(self, _fname, _read_labels=1):
-        nLinesHead = 11
-        hlp = []
-
-        with open(_fname,'r') as f:
-            for i in range(nLinesHead):
-                hlp.append(f.readline())
-
-        ne, nx, ny = [int(hlp[i].replace('#','').split()[0]) for i in [3,6,9]]
-        ns = 1
-        testStr = hlp[nLinesHead - 1]
-        if testStr[0] == '#':
-            ns = int(testStr.replace('#','').split()[0])
-
-        e0,e1,x0,x1,y0,y1 = [float(hlp[i].replace('#','').split()[0]) for i in [1,2,4,5,7,8]]
-
-        data = numpy.squeeze(numpy.loadtxt(_fname, dtype=numpy.float64)) #get data from file (C-aligned flat)
-
-        allrange = e0, e1, ne, x0, x1, nx, y0, y1, ny
-
-        arLabels = ['Photon Energy', 'Horizontal Position', 'Vertical Position', 'Intensity']
-        arUnits = ['eV', 'm', 'm', 'ph/s/.1%bw/mm^2']
-
-        if _read_labels:
-            arTokens = hlp[0].split(' [')
-            arLabels[3] = arTokens[0].replace('#','')
-            arUnits[3] = '';
-            if len(arTokens) > 1:
-                arUnits[3] = arTokens[1].split('] ')[0]
-
-            for i in range(3):
-                arTokens = hlp[i*3 + 1].split()
-                nTokens = len(arTokens)
-                nTokensLabel = nTokens - 3
-                nTokensLabel_mi_1 = nTokensLabel - 1
-                strLabel = ''
-                for j in range(nTokensLabel):
-                    strLabel += arTokens[j + 2]
-                    if j < nTokensLabel_mi_1: strLabel += ' '
-                arLabels[i] = strLabel
-                arUnits[i] = arTokens[nTokens - 1].replace('[','').replace(']','')
-
-        return data, None, allrange, arLabels, arUnits
-
-    def loadNumpyFormat(self, filename):
-        data, dump, allrange, arLabels, arUnits = self.file_load(filename)
-
-        dim_x = allrange[5]
-        dim_y = allrange[8]
-        np_array = data.reshape((dim_y, dim_x))
-        np_array = np_array.transpose()
-        x_coordinates = numpy.linspace(allrange[3], allrange[4], dim_x)
-        y_coordinates = numpy.linspace(allrange[6], allrange[7], dim_y)
-
-        return x_coordinates, y_coordinates, np_array
-
-    ####################################################################################
-    # ASCII FILES
-    ####################################################################################
-
-    def checkASCIIFilesFields(self):
-        congruence.checkFile(self.x_positions_file)
-        congruence.checkFile(self.z_positions_file)
-        congruence.checkFile(self.x_divergences_file)
-        congruence.checkFile(self.z_divergences_file)
-
-        self.x_positions_factor = float(self.x_positions_factor)
-        self.z_positions_factor = float(self.z_positions_factor)
-        self.x_divergences_factor = float(self.x_divergences_factor)
-        self.z_divergences_factor = float(self.z_divergences_factor)
-
-        congruence.checkStrictlyPositiveNumber(self.x_positions_factor, "X Position Units to Workspace Units")
-        congruence.checkStrictlyPositiveNumber(self.z_positions_factor, "Z Position Units to Workspace Units")
-        congruence.checkStrictlyPositiveNumber(self.x_divergences_factor, "X Divergence Units to rad")
-        congruence.checkStrictlyPositiveNumber(self.z_divergences_factor, "Z Divergence Units to rad")
-
-    def loadASCIIFiles(self):
-        self.checkASCIIFilesFields()
-
-        x_positions = self.extract_distribution_from_file(distribution_file_name=self.x_positions_file)
-        z_positions = self.extract_distribution_from_file(distribution_file_name=self.z_positions_file)
-
-        x_positions[:, 0] *= self.x_positions_factor
-        z_positions[:, 0] *= self.z_positions_factor
-
-        x_divergences = self.extract_distribution_from_file(distribution_file_name=self.x_divergences_file)
-        z_divergences = self.extract_distribution_from_file(distribution_file_name=self.z_divergences_file)
-
-        x_divergences[:, 0] *= self.x_divergences_factor
-        z_divergences[:, 0] *= self.z_divergences_factor
-
-        x, z, intensity_source_dimension = self.combine_distributions(x_positions, z_positions)
-        x_first, z_first, intensity_angular_distribution = self.combine_distributions(x_divergences, z_divergences)
-
-        return x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution
-
-
-    def extract_distribution_from_file(self, distribution_file_name):
-        distribution = []
-
-        try:
-            distribution_file = open(distribution_file_name, "r")
-
-            rows = distribution_file.readlines()
-
-            for index in range(0, len(rows)):
-                row = rows[index]
-
-                if not row.strip() == "":
-                    values = row.split()
-
-                    if not len(values) == 2: raise Exception("Malformed file, must be: <value> <spaces> <frequency>")
-
-                    value = float(values[0].strip())
-                    frequency = float(values[1].strip())
-
-                    distribution.append([value, frequency])
-
-        except Exception as err:
-            raise Exception("Problems reading distribution file: {0}".format(err))
-        except:
-            raise Exception("Unexpected error reading distribution file: ", sys.exc_info()[0])
-
-        return numpy.array(distribution)
-
-    def combine_distributions(self, distribution_x, distribution_y):
-
-        coord_x = distribution_x[:, 0]
-        coord_y = distribution_y[:, 0]
-
-        intensity_x = repmat(distribution_x[:, 1], len(coord_y), 1).transpose()
-        intensity_y = repmat(distribution_y[:, 1], len(coord_x), 1)
-
-        if self.combine_strategy == 0:
-            convoluted_intensity = numpy.sqrt(intensity_x*intensity_y)
-        elif self.combine_strategy == 1:
-            convoluted_intensity = numpy.sqrt(intensity_x**2 + intensity_y**2)
-        elif self.combine_strategy == 2:
-            convoluted_intensity = convolve2d(intensity_x, intensity_y, boundary='fill', mode='same', fillvalue=0)
-        elif self.combine_strategy == 3:
-            convoluted_intensity = 0.5*(intensity_x + intensity_y)
-
-        return coord_x, coord_y, convoluted_intensity
-
 
