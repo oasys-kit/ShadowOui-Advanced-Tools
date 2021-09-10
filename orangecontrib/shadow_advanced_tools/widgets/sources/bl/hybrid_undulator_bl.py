@@ -293,9 +293,8 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
                                                       kind_of_sampler=widget.kind_of_sampler,
                                                       seed=0 if widget.seed == 0 else widget.seed + 2)
 
-    if widget.distribution_source == 0 and widget.is_canted_undulator() and widget.waist_position != 0.0:
+    if widget.distribution_source == 0 and is_canted_undulator(widget) and widget.waist_position != 0.0:
         beam_out._beam.retrace(-widget.waist_position / widget.workspace_units_to_m)  # put the beam at the center of the ID
-
 
     return total_power
 
@@ -354,6 +353,9 @@ def resonance_energy(widget, theta_x=0.0, theta_z=0.0, harmonic=1):
 
 def get_default_initial_z(widget):
     return widget.longitudinal_central_position-0.5*widget.undulator_period*(widget.number_of_periods + 8) # initial Longitudinal Coordinate (set before the ID)
+
+def is_canted_undulator(widget):
+    return widget.longitudinal_central_position != 0.0
 
 ####################################################################################
 # SRW CALCULATION
@@ -637,7 +639,7 @@ def __transform_srw_array(output_array, mesh):
 
 def __calculate_waist_position(widget, energy):
     if widget.distribution_source == 0: # SRW calculation
-        if widget.is_canted_undulator():
+        if is_canted_undulator(widget):
             if widget.waist_position_calculation == 0:  # None
                 widget.waist_position = 0.0
             elif widget.waist_position_calculation == 1:  # Automatic

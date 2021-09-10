@@ -89,38 +89,17 @@ class Distribution:
     POSITION = 0
     DIVERGENCE = 1
 
-class HybridUndulator(GenericElement):
 
-    TABS_AREA_HEIGHT = 620
-
-    name = "Shadow/SRW Undulator"
-    description = "Shadow Source: Hybrid Shadow/SRW Undulator"
-    icon = "icons/undulator.png"
-    priority = 1
-    maintainer = "Luca Rebuffi"
-    maintainer_email = "lrebuffi(@at@)anl.gov"
-    category = "Sources"
-    keywords = ["data", "file", "load", "read"]
-
-    inputs = WidgetDecorator.syned_input_data()
-    inputs.append(("SynedData#2", Beamline, "receive_syned_data"))
-    inputs.append(("Trigger", TriggerOut, "sendNewBeam"))
-
-    outputs = [{"name":"Beam",
-                "type":ShadowBeam,
-                "doc":"Shadow Beam",
-                "id":"beam"}]
-
+class HybridUndulatorAttributes():
     distribution_source = Setting(0)
 
     # SRW INPUT
-
     cumulated_view_type = Setting(0)
 
-    number_of_periods = Setting(184) # Number of ID Periods (without counting for terminations
-    undulator_period =  Setting(0.025) # Period Length [m]
-    Kv =  Setting(0.857)
-    Kh =  Setting(0)
+    number_of_periods = Setting(184)  # Number of ID Periods (without counting for terminations
+    undulator_period = Setting(0.025)  # Period Length [m]
+    Kv = Setting(0.857)
+    Kh = Setting(0)
     Bh = Setting(0.0)
     Bv = Setting(1.5)
 
@@ -157,14 +136,14 @@ class HybridUndulator(GenericElement):
 
     source_dimension_wf_h_slit_gap = Setting(0.0015)
     source_dimension_wf_v_slit_gap = Setting(0.0015)
-    source_dimension_wf_h_slit_points=Setting(301)
-    source_dimension_wf_v_slit_points=Setting(301)
+    source_dimension_wf_h_slit_points = Setting(301)
+    source_dimension_wf_v_slit_points = Setting(301)
     source_dimension_wf_distance = Setting(28.0)
 
-    horizontal_range_modification_factor_at_resizing       = Setting(0.5)
-    horizontal_resolution_modification_factor_at_resizing  = Setting(5.0)
-    vertical_range_modification_factor_at_resizing         = Setting(0.5)
-    vertical_resolution_modification_factor_at_resizing    = Setting(5.0)
+    horizontal_range_modification_factor_at_resizing = Setting(0.5)
+    horizontal_resolution_modification_factor_at_resizing = Setting(5.0)
+    vertical_range_modification_factor_at_resizing = Setting(0.5)
+    vertical_resolution_modification_factor_at_resizing = Setting(5.0)
 
     waist_position_calculation = Setting(0)
     waist_position = Setting(0.0)
@@ -173,10 +152,10 @@ class HybridUndulator(GenericElement):
     waist_position_auto_h = Setting(0.0)
     waist_position_auto_v = Setting(0.0)
     waist_back_propagation_parameters = Setting(1)
-    waist_horizontal_range_modification_factor_at_resizing       = Setting(0.5)
-    waist_horizontal_resolution_modification_factor_at_resizing  = Setting(5.0)
-    waist_vertical_range_modification_factor_at_resizing         = Setting(0.5)
-    waist_vertical_resolution_modification_factor_at_resizing    = Setting(5.0)
+    waist_horizontal_range_modification_factor_at_resizing = Setting(0.5)
+    waist_horizontal_resolution_modification_factor_at_resizing = Setting(5.0)
+    waist_vertical_range_modification_factor_at_resizing = Setting(0.5)
+    waist_vertical_resolution_modification_factor_at_resizing = Setting(5.0)
     which_waist = Setting(2)
     number_of_waist_fit_points = Setting(10)
     degree_of_waist_fit = Setting(3)
@@ -186,10 +165,10 @@ class HybridUndulator(GenericElement):
 
     kind_of_sampler = Setting(1)
     save_srw_result = Setting(0)
-    
+
     # SRW FILE INPUT
 
-    source_dimension_srw_file     = Setting("intensity_source_dimension.dat")
+    source_dimension_srw_file = Setting("intensity_source_dimension.dat")
     angular_distribution_srw_file = Setting("intensity_angular_distribution.dat")
 
     # ASCII FILE INPUT
@@ -207,22 +186,22 @@ class HybridUndulator(GenericElement):
 
     # SHADOW SETTINGS
 
-    number_of_rays=Setting(5000)
-    seed=Setting(6775431)
+    number_of_rays = Setting(5000)
+    seed = Setting(6775431)
 
     use_harmonic = Setting(0)
     harmonic_number = Setting(1)
     harmonic_energy = 0.0
-    energy=Setting(10000.0)
-    energy_to=Setting(10100.0)
-    energy_points=Setting(10)
+    energy = Setting(10000.0)
+    energy_to = Setting(10100.0)
+    energy_points = Setting(10)
 
     polarization = Setting(1)
     coherent_beam = Setting(0)
     phase_diff = Setting(0.0)
     polarization_degree = Setting(1.0)
 
-    optimize_source=Setting(0)
+    optimize_source = Setting(0)
     optimize_file_name = Setting("NONESPECIFIED")
     max_number_of_rejected_rays = Setting(10000000)
 
@@ -244,6 +223,48 @@ class HybridUndulator(GenericElement):
     cumulated_integrated_flux = None
     cumulated_power_density = None
     cumulated_power = None
+
+    def get_write_file_options(self):
+        write_begin_file = 0
+        write_start_file = 0
+        write_end_file = 0
+
+        if self.file_to_write_out == 1:
+            write_begin_file = 1
+        if self.file_to_write_out == 2:
+            write_begin_file = 1
+
+            if sys.platform == 'linux':
+                print("Warning", "Debug Mode is not yet available for sources in Linux platforms")
+            else:
+                write_start_file = 1
+                write_end_file = 1
+
+        return write_begin_file, write_start_file, write_end_file
+
+class HybridUndulator(GenericElement, HybridUndulatorAttributes):
+
+    TABS_AREA_HEIGHT = 620
+
+    name = "Shadow/SRW Undulator"
+    description = "Shadow Source: Hybrid Shadow/SRW Undulator"
+    icon = "icons/undulator.png"
+    priority = 1
+    maintainer = "Luca Rebuffi"
+    maintainer_email = "lrebuffi(@at@)anl.gov"
+    category = "Sources"
+    keywords = ["data", "file", "load", "read"]
+
+    inputs = WidgetDecorator.syned_input_data()
+    inputs.append(("SynedData#2", Beamline, "receive_syned_data"))
+    inputs.append(("Trigger", TriggerOut, "sendNewBeam"))
+
+    outputs = [{"name":"Beam",
+                "type":ShadowBeam,
+                "doc":"Shadow Beam",
+                "id":"beam"}]
+
+
 
     def __init__(self, show_automatic_box=False):
         super().__init__(show_automatic_box=show_automatic_box)
@@ -614,9 +635,6 @@ class HybridUndulator(GenericElement):
 
         gui.rubber(self.mainArea)
 
-    def is_canted_undulator(self):
-        return self.longitudinal_central_position != 0.0
-
     def initializeCumulatedTabs(self):
         current_tab = self.cumulated_tabs.currentIndex()
 
@@ -637,7 +655,7 @@ class HybridUndulator(GenericElement):
         self.cumulated_tabs.setCurrentIndex(current_tab)
 
     def manageWaistPosition(self):
-        is_canted = self.is_canted_undulator()
+        is_canted = BL.is_canted_undulator(self)
 
         self.warning_label.setVisible(is_canted)
         self.initializeWaistPositionTab(show=is_canted)
@@ -852,24 +870,6 @@ class HybridUndulator(GenericElement):
             self.harmonic_energy = round(BL.resonance_energy(self, harmonic=self.harmonic_number), 2)
         else:
             self.harmonic_energy = numpy.nan
-
-    def get_write_file_options(self):
-        write_begin_file = 0
-        write_start_file = 0
-        write_end_file = 0
-
-        if self.file_to_write_out == 1:
-            write_begin_file = 1
-        if self.file_to_write_out == 2:
-            write_begin_file = 1
-
-            if sys.platform == 'linux':
-                QMessageBox.warning(self, "Warning", "Debug Mode is not yet available for sources in Linux platforms", QMessageBox.Ok)
-            else:
-                write_start_file = 1
-                write_end_file = 1
-
-        return write_begin_file, write_start_file, write_end_file
 
     def set_WFUseHarmonic(self):
         self.use_harmonic_box_1.setVisible(self.use_harmonic==0)
