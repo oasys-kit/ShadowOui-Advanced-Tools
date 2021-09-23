@@ -264,8 +264,6 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
                 "doc":"Shadow Beam",
                 "id":"beam"}]
 
-
-
     def __init__(self, show_automatic_box=False):
         super().__init__(show_automatic_box=show_automatic_box)
 
