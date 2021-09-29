@@ -46,6 +46,7 @@
 # #########################################################################
 
 import numpy
+import time
 from numpy.matlib import repmat
 from scipy.signal import convolve2d
 
@@ -208,7 +209,7 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
 
         first_index = 0
         prog_bars = numpy.linspace(50, 80, energy_points)
-        current_seed = 0 if widget.seed == 0 else widget.seed
+        current_seed = time.time() if widget.seed == 0 else widget.seed
         random.seed(current_seed)
 
         for energy, i in zip(energies, range(energy_points)):
@@ -281,7 +282,7 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
                                                       intensity=intensity_source_dimension,
                                                       distribution_type=Distribution.POSITION,
                                                       kind_of_sampler=widget.kind_of_sampler,
-                                                      seed=0 if widget.seed == 0 else widget.seed + 1)
+                                                      seed=time.time() if widget.seed == 0 else widget.seed + 1)
 
         widget.progressBarSet(70)
 
@@ -291,7 +292,7 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
                                                       intensity=intensity_angular_distribution,
                                                       distribution_type=Distribution.DIVERGENCE,
                                                       kind_of_sampler=widget.kind_of_sampler,
-                                                      seed=0 if widget.seed == 0 else widget.seed + 2)
+                                                      seed=time.time() if widget.seed == 0 else widget.seed + 2)
 
     if widget.distribution_source == 0 and is_canted_undulator(widget) and widget.waist_position != 0.0:
         beam_out._beam.retrace(-widget.waist_position / widget.workspace_units_to_m)  # put the beam at the center of the ID
