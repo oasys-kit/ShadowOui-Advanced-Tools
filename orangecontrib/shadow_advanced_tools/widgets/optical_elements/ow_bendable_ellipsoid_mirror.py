@@ -1,6 +1,4 @@
-import os, sys, numpy
-from scipy.interpolate import RectBivariateSpline, interp2d
-from scipy.optimize import curve_fit
+import sys
 
 from matplotlib import cm
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -19,17 +17,10 @@ from oasys.widgets import gui as oasysgui
 from oasys.widgets import congruence
 from oasys.util.oasys_util import TriggerIn
 
-from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowBeam, ShadowPreProcessorData
-from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
+from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowPreProcessorData
 from orangecontrib.shadow.widgets.gui import ow_ellipsoid_element, ow_optical_element
 
-from Shadow import ShadowTools as ST
-
-TRAPEZIUM = 0
-RECTANGLE = 1
-
-SINGLE_MOMENTUM = 0
-DOUBLE_MOMENTUM = 1
+from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.bendable_ellipsoid_mirror_bl import *
 
 class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     name = "Bendable Ellipsoid Mirror"
@@ -91,6 +82,7 @@ class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
 
     which_length = Setting(0)
     optimized_length = Setting(0.0)
+    n_fit_steps = Setting(3)
 
     M1    = Setting(0.0)
     ratio = Setting(0.5)
@@ -140,6 +132,8 @@ class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         tab_fit = oasysgui.createTabPage(tabs, "Fit Setting")
 
         fit_box = oasysgui.widgetBox(tab_fit, "", addSpace=False, orientation="vertical")
+
+        oasysgui.lineEdit(fit_box, self, "n_fit_steps", "Nr. fit steps", labelWidth=250, valueType=int, orientation="horizontal")
 
         file_box = oasysgui.widgetBox(fit_box, "", addSpace=False, orientation="horizontal", height=25)
         self.le_output_file_name = oasysgui.lineEdit(file_box, self, "output_file_name", "Out File Name", labelWidth=100, valueType=str, orientation="horizontal")
@@ -276,6 +270,7 @@ class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         if self.is_cylinder != 1: raise ValueError("Bender Ellipse must be a cylinder")
         if self.cylinder_orientation != 0: raise ValueError("Cylinder orientation must be 0")
         if self.is_infinite == 0: raise ValueError("This OE can't have infinite dimensions")
+        congruence.checkStrictlyPositiveNumber(self.n_fit_steps, "Nr. Fit Steps")
         if self.which_length==1:
             congruence.checkStrictlyPositiveNumber(self.optimized_length, "Optimized Length")
             congruence.checkLessOrEqualThan(self.optimized_length, self.dim_y_plus+self.dim_y_minus, "Optimized Length", "Total Length")
@@ -289,53 +284,30 @@ class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         self.output_file_name_full = congruence.checkFileName(self.output_file_name)
 
     def completeOperations(self, shadow_oe):
-        shadow_oe_temp  = shadow_oe.duplicate()
-        input_beam_temp = self.input_beam.duplicate(history=False)
+        shadow_oe, bender_data_to_plot = apply_bender_surface(widget=self,
+                                                              shadow_oe=shadow_oe,
+                                                              input_beam=self.input_beam)
 
-        self.manage_acceptance_slits(shadow_oe_temp)
 
-        ShadowBeam.traceFromOE(input_beam_temp,
-                               shadow_oe_temp,
-                               write_start_file=0,
-                               write_end_file=0,
-                               widget_class_name=type(self).__name__)
+        self.plot1D(bender_data_to_plot.y, bender_data_to_plot.bender_profile, y_values_2=bender_data_to_plot.ideal_profile,
+                    index=0, title=bender_data_to_plot.titles[0], um=1)
+        self.plot1D(bender_data_to_plot.y, bender_data_to_plot.correction_profile,
+                    index=1, title=bender_data_to_plot.titles[1])
 
-        x, y, z = self.calculate_ideal_surface(shadow_oe_temp)
-
-        bender_parameter, z_bender_correction = self.calculate_bender_correction(y, z, self.kind_of_bender, self.shape)
-
-        self.M1_out = round(bender_parameter[0], int(6*self.workspace_units_to_mm))
-        if self.shape == TRAPEZIUM:
-            self.e_out = round(bender_parameter[1], 5)
-            if self.kind_of_bender == DOUBLE_MOMENTUM: self.ratio_out = round(bender_parameter[2], 5)
-        elif self.shape == RECTANGLE:
-            if self.kind_of_bender == DOUBLE_MOMENTUM: self.ratio_out = round(bender_parameter[1], 5)
-
-        self.plot3D(x, y, z_bender_correction, 2, "Ideal - Bender Surfaces")
+        self.plot3D(bender_data_to_plot.x,
+                    bender_data_to_plot.y,
+                    bender_data_to_plot.z_bender_correction_no_figure_error,
+                    index=2, title="Ideal - Bender Surfaces")
 
         if self.modified_surface > 0:
-            x_e, y_e, z_e = ShadowPreProcessor.read_surface_error_file(self.ms_defect_file_name)
+            self.plot3D(bender_data_to_plot.x,
+                        bender_data_to_plot.y,
+                        bender_data_to_plot.z_figure_error,  index=3, title="Figure Error Surface")
+            self.plot3D(bender_data_to_plot.x,
+                        bender_data_to_plot.y,
+                        bender_data_to_plot.z_bender_correction, index=4, title="Ideal - Bender + Figure Error Surfaces")
 
-            if len(x) == len(x_e) and len(y) == len(y_e) and \
-                    x[0] == x_e[0] and x[-1] == x_e[-1] and \
-                    y[0] == y_e[0] and y[-1] == y_e[-1]:
-                z_figure_error = z_e
-            else:
-                z_figure_error = interp2d(y_e, x_e, z_e, kind='cubic')(y, x)
-
-            z_bender_correction += z_figure_error
-
-            self.plot3D(x, y, z_figure_error,      3, "Figure Error Surface")
-            self.plot3D(x, y, z_bender_correction, 4, "Ideal - Bender + Figure Error Surfaces")
-
-        ST.write_shadow_surface(z_bender_correction.T, numpy.round(x, 6), numpy.round(y, 6), self.output_file_name_full)
-
-        # Add new surface as figure error
-        shadow_oe._oe.F_RIPPLE  = 1
-        shadow_oe._oe.F_G_S     = 2
-        shadow_oe._oe.FILE_RIP  = bytes(self.output_file_name_full, 'utf-8')
-
-        # Redo Raytracing with the new file
+        # Redo raytracing with the bender correction as error profile
         super().completeOperations(shadow_oe)
 
         self.send("PreProcessor_Data", ShadowPreProcessorData(error_profile_data_file=self.output_file_name,
@@ -345,153 +317,6 @@ class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     def instantiateShadowOE(self):
         return ShadowOpticalElement.create_ellipsoid_mirror()
 
-
-    def calculate_ideal_surface(self, shadow_oe, sign=-1):
-        x = numpy.linspace(-self.dim_x_minus, self.dim_x_plus, self.bender_bin_x + 1)
-        y = numpy.linspace(-self.dim_y_minus, self.dim_y_plus, self.bender_bin_y + 1)
-
-        c1  = round(shadow_oe._oe.CCC[0], 10)
-        c2  = round(shadow_oe._oe.CCC[1], 10)
-        c3  = round(shadow_oe._oe.CCC[2], 10)
-        c4  = round(shadow_oe._oe.CCC[3], 10)
-        c5  = round(shadow_oe._oe.CCC[4], 10)
-        c6  = round(shadow_oe._oe.CCC[5], 10)
-        c7  = round(shadow_oe._oe.CCC[6], 10)
-        c8  = round(shadow_oe._oe.CCC[7], 10)
-        c9  = round(shadow_oe._oe.CCC[8], 10)
-        c10 = round(shadow_oe._oe.CCC[9], 10)
-
-        xx, yy = numpy.meshgrid(x, y)
-
-        c = c1*(xx**2) + c2*(yy**2) + c4*xx*yy + c7*xx + c8*yy + c10
-        b = c5*yy + c6*xx + c9
-        a = c3
-
-        z = (-b + sign*numpy.sqrt(b**2 - 4*a*c))/(2*a)
-        z[b**2 - 4*a*c < 0] = numpy.nan
-
-        return x, y, z.T
-
-    def calculate_bender_correction(self, y, z, kind_of_bender, shape):
-        b0 = self.dim_x_plus + self.dim_x_minus
-        L  = self.dim_y_plus + self.dim_y_minus  # add optimization length
-
-        # flip the coordinate system to be consistent with Mike's formulas
-        ideal_profile = z[0, :][::-1]  # one row is the profile of the cylinder, enough for the minimizer
-        ideal_profile += -ideal_profile[0] + ((L/2 + y)*(ideal_profile[0]-ideal_profile[-1]))/L # Rotation
-
-        if self.which_length == 0:
-            y_fit             = y
-            ideal_profile_fit = ideal_profile
-        else:
-            cursor            = numpy.where(numpy.logical_and(y >= -self.optimized_length/2,
-                                                              y <= self.optimized_length/2) )
-            y_fit             = y[cursor]
-            ideal_profile_fit = ideal_profile[cursor]
-
-        epsilon_minus = 1 - 1e-8
-        epsilon_plus = 1 + 1e-8
-
-        Eh_3 = self.E * self.h ** 3
-
-        initial_guess = None
-        constraints = None
-        bender_function = None
-
-        if shape == TRAPEZIUM:
-            def general_bender_function(Y, M1, e, ratio):
-                M2 = M1 * ratio
-                A = (M1 + M2) / 2
-                B = (M1 - M2) / L
-                C = Eh_3 * (2 * b0 + e * b0) / 24
-                D = Eh_3 * e * b0 / (12 * L)
-                H = (A * D + B * C) / D ** 2
-                CDLP = C + D * L / 2
-                CDLM = C - D * L / 2
-                F = (H / L) * ((CDLM * numpy.log(CDLM) - CDLP * numpy.log(CDLP)) / D + L)
-                G = (-H * ((CDLM * numpy.log(CDLM) + CDLP * numpy.log(CDLP))) + (B * L ** 2) / 4) / (2 * D)
-                CDY = C + D * Y
-
-                return H * ((CDY / D) * numpy.log(CDY) - Y) - (B * Y ** 2) / (2 * D) + F * Y + G
-
-            def bender_function_2m(Y, M1, e, ratio): return general_bender_function(Y, M1, e, ratio)
-            def bender_function_1m(Y, M1, e):        return general_bender_function(Y, M1, e, 1.0)
-
-            if kind_of_bender == SINGLE_MOMENTUM:
-                bender_function = bender_function_1m
-                initial_guess = [self.M1, self.e]
-                constraints = [[self.M1_min if self.M1_fixed == False else (self.M1 * epsilon_minus),
-                                self.e_min  if self.e_fixed == False  else (self.e * epsilon_minus)],
-                               [self.M1_max if self.M1_fixed == False else (self.M1 * epsilon_plus),
-                                self.e_max  if self.e_fixed == False  else (self.e * epsilon_plus)]]
-            elif kind_of_bender == DOUBLE_MOMENTUM:
-                bender_function = bender_function_2m
-                initial_guess = [self.M1, self.e, self.ratio]
-                constraints = [[self.M1_min    if self.M1_fixed == False    else (self.M1*epsilon_minus),
-                                self.e_min     if self.e_fixed == False     else (self.e*epsilon_minus),
-                                self.ratio_min if self.ratio_fixed == False else (self.ratio*epsilon_minus)],
-                               [self.M1_max    if self.M1_fixed == False    else (self.M1*epsilon_plus),
-                                self.e_max     if self.e_fixed == False     else (self.e*epsilon_plus),
-                                self.ratio_max if self.ratio_fixed == False else (self.ratio*epsilon_plus)]]
-        elif shape == RECTANGLE:
-            def general_bender_function(Y, M1, ratio):
-                M2 = M1 * ratio
-                A = (M1 + M2) / 2
-                B = (M1 - M2) / L
-                C = Eh_3 * b0 / 12
-                F = (B * L**2) / (24 * C)
-                G = -(A * L**2) / (8 * C)
-
-                return -(B * Y**3) / (6 * C) + (A * Y**2) / (2 * C) + F * Y + G
-
-            def bender_function_2m(Y, M1, ratio): return general_bender_function(Y, M1, ratio)
-            def bender_function_1m(Y, M1):        return general_bender_function(Y, M1, 1.0)
-
-            if kind_of_bender == SINGLE_MOMENTUM:
-                bender_function = bender_function_1m
-                initial_guess = [self.M1]
-                constraints = [[self.M1_min if self.M1_fixed == False else (self.M1 * epsilon_minus)],
-                               [self.M1_max if self.M1_fixed == False else (self.M1 * epsilon_plus)]]
-            elif kind_of_bender == DOUBLE_MOMENTUM:
-                bender_function = bender_function_2m
-                initial_guess = [self.M1, self.ratio]
-                constraints = [[self.M1_min    if self.M1_fixed == False    else (self.M1*epsilon_minus),
-                                self.ratio_min if self.ratio_fixed == False else (self.ratio*epsilon_minus)],
-                               [self.M1_max    if self.M1_fixed == False    else (self.M1*epsilon_plus),
-                                self.ratio_max if self.ratio_fixed == False else (self.ratio*epsilon_plus)]]
-
-        parameters, _ = curve_fit(f=bender_function,
-                                  xdata=y_fit,
-                                  ydata=ideal_profile_fit,
-                                  p0=initial_guess,
-                                  bounds=constraints,
-                                  method='trf')
-
-        if len(parameters)   == 1: bender_profile = bender_function(y, parameters[0])
-        elif len(parameters) == 2: bender_profile = bender_function(y, parameters[0], parameters[1])
-        else:                      bender_profile = bender_function(y, parameters[0], parameters[1], parameters[2])
-
-        # rotate back to Shadow system
-        bender_profile = bender_profile[::-1]
-        ideal_profile  = ideal_profile[::-1]
-
-        # from here it's Shadow Axis system
-        correction_profile = ideal_profile - bender_profile
-        if self.which_length == 1: correction_profile_fit = correction_profile[cursor]
-
-        # r-squared = 1 - residual sum of squares / total sum of squares
-        r_squared = 1 - (numpy.sum(correction_profile**2) / numpy.sum((ideal_profile - numpy.mean(ideal_profile))**2))
-        rms       = round(correction_profile.std()*1e9*self.workspace_units_to_m, 6)
-        if self.which_length == 1: rms_opt = round(correction_profile_fit.std()*1e9*self.workspace_units_to_m, 6)
-
-        self.plot1D(y, bender_profile, y_values_2=ideal_profile, index=0, title = "Bender vs. Ideal Profiles" + "\n" + r'$R^2$ = ' + str(r_squared), um=1)
-        self.plot1D(y, correction_profile, index=1, title="Correction Profile 1D, r.m.s. = " + str(rms) + " nm" +
-                                                          ("" if self.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)")))
-
-        z_bender_correction = numpy.zeros(z.shape)
-        for i in range(z_bender_correction.shape[0]): z_bender_correction[i, :] = numpy.copy(correction_profile)
-
-        return parameters, z_bender_correction
 
     def plot1D(self, x_coords, y_values, y_values_2=None, index=0, title="", um=0):
         if self.show_bender_plots == 1:
