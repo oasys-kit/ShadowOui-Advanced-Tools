@@ -46,7 +46,7 @@
 # ----------------------------------------------------------------------- #
 import sys
 
-from settings import Setting
+from orangewidget.settings import Setting
 
 class HybridUndulatorAttributes():
     distribution_source = Setting(0)

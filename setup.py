@@ -53,7 +53,7 @@ except AttributeError:
     from setuptools import find_packages, setup
 
 NAME = 'OASYS1-ShadowOui-Advanced-Tools'
-VERSION = '1.0.80'
+VERSION = '1.0.82'
 ISRELEASED = True
 
 DESCRIPTION = 'ShadowOui advanced simulation tools'
@@ -86,10 +86,10 @@ SETUP_REQUIRES = (
 
 INSTALL_REQUIRES = (
     'setuptools',
-    'oasys1>=1.2.86',
+    'oasys1>=1.2.89',
     'scikit-image',
-    'oasys-srwpy>=1.0.4',
-    'OASYS1-ShadowOui>=1.5.124',
+    'oasys-srwpy>=1.0.5',
+    'OASYS1-ShadowOui>=1.5.131',
 )
 
 PACKAGES = find_packages(exclude=('*.tests', '*.tests.*', 'tests.*', 'tests'))
