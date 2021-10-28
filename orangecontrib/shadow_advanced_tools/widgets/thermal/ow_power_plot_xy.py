@@ -1218,6 +1218,8 @@ class PowerPlotXY(AutomaticElement):
                     energy_max = 0.0
                     energy_step = 0.0
 
+                if not self.plot_canvas.cumulated_previous_power_plot is None:
+                    self.plot_canvas.cumulated_previous_power_plot *= self.scaling_factor
                 self.plot_canvas.cumulated_power_plot = cumulated_power_plot
                 self.plot_canvas.plot_power_density_ticket(ticket,
                                                            ticket["v_label"],
