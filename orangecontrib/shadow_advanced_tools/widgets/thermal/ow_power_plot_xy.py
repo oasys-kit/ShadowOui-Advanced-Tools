@@ -381,7 +381,8 @@ class PowerPlotXY(AutomaticElement):
         post_box = oasysgui.widgetBox(tab_post_basic, "Basic Post Processing Setting", addSpace=False, orientation="vertical", height=460)
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical")
-        button = gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25)
+        button = gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25, width=352)
+        gui.separator(button_box, height=10)
 
         font = QFont(button.font())
         font.setItalic(True)
@@ -390,10 +391,14 @@ class PowerPlotXY(AutomaticElement):
         palette.setColor(QPalette.ButtonText, QColor('dark red'))
         button.setPalette(palette)
 
-        gui.separator(button_box, height=10)
-        gui.button(button_box, self, "Invert", callback=self.invertPlot, height=25)
-        gui.button(button_box, self, "Rescale Plot", callback=self.rescalePlot, height=25)
+        button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
 
+        gui.button(button_box, self, "Invert H,V", callback=self.invertPlot, height=25)
+        gui.button(button_box, self, "Flip H", callback=self.flipH, height=25)
+        gui.button(button_box, self, "Flip V", callback=self.flipV, height=25)
+
+        button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical")
+        gui.button(button_box, self, "Rescale Plot", callback=self.rescalePlot, height=25)
         oasysgui.lineEdit(post_box, self, "scaling_factor", "Scaling factor", labelWidth=250,  valueType=float, orientation="horizontal")
 
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
@@ -1140,6 +1145,60 @@ class PowerPlotXY(AutomaticElement):
 
                 if self.IS_DEVELOP: raise e
 
+    def __flip(self, axis=0):
+        if not self.plotted_ticket is None:
+            try:
+                ticket = self.plotted_ticket.copy()
+
+                histogram = ticket["histogram"]
+                h_coord = ticket["bin_h_center"]
+                v_coord = ticket["bin_v_center"]
+
+                h_coord, v_coord, histogram = flip(h_coord, v_coord, histogram, axis=axis)
+
+                ticket["histogram"] = histogram
+                ticket["bin_h_center"] = h_coord
+                ticket["bin_v_center"] = v_coord
+
+                pixel_area = (h_coord[1] - h_coord[0]) * (v_coord[1] - v_coord[0])
+
+                if self.plot_canvas is None:
+                    self.plot_canvas = PowerPlotXYWidget()
+                    self.image_box.layout().addWidget(self.plot_canvas)
+
+                cumulated_power_plot = numpy.sum(histogram) * pixel_area
+
+                try:
+                    energy_min = ticket["energy_min"]
+                    energy_max = ticket["energy_max"]
+                    energy_step = ticket["energy_step"]
+                except:
+                    energy_min = 0.0
+                    energy_max = 0.0
+                    energy_step = 0.0
+
+                self.plot_canvas.cumulated_power_plot = cumulated_power_plot
+                self.plot_canvas.plot_power_density_ticket(ticket,
+                                                           ticket["v_label"],
+                                                           ticket["h_label"],
+                                                           cumulated_total_power=0.0,
+                                                           energy_min=energy_min,
+                                                           energy_max=energy_max,
+                                                           energy_step=energy_step,
+                                                           cumulated_quantity=self.cumulated_quantity)
+
+                self.plotted_ticket = ticket
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
+
+                if self.IS_DEVELOP: raise e
+
+    def flipH(self):
+        self.__flip(0)
+
+    def flipV(self):
+        self.__flip(1)
+
     def invertPlot(self):
         if not self.plotted_ticket is None:
             try:
@@ -1388,13 +1447,11 @@ class PowerPlotXY(AutomaticElement):
 
                         histogram[numpy.meshgrid(mask_h, mask_v)] = 0.0
                 elif self.masking == 2:
-                    h, v = numpy.meshgrid(h_coord, v_coord)
+                    h, v = numpy.meshgrid(v_coord, h_coord)
                     r = numpy.sqrt(h ** 2 + v ** 2)
 
-                    if self.masking_type == 0:
-                        mask = r > self.masking_diameter * 0.5
-                    else:
-                        mask = r <= self.masking_diameter * 0.5
+                    if self.masking_type == 0: mask = numpy.where(r > self.masking_diameter * 0.5)
+                    else:                      mask = numpy.where(r <= self.masking_diameter * 0.5)
 
                     histogram[mask] = 0.0
 
@@ -1669,6 +1726,9 @@ def rebin(x, y, z, new_shape):
 
 def invert(x, y, data):
     return y, x, data.T
+
+def flip(x, y, data, axis=0):
+    return x, y, numpy.flip(data, axis=axis)
 
 def cut(x, y, data, range_x, range_y):
     zoom_x = numpy.where(numpy.logical_and(x >= range_x[0], x <= range_x[1]))
