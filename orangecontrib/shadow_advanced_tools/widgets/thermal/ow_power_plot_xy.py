@@ -441,6 +441,17 @@ class PowerPlotXY(AutomaticElement):
 
         post_box = oasysgui.widgetBox(tab_post_smooth, "Smoothing Setting", addSpace=False, orientation="vertical", height=220)
 
+        button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical")
+        button = gui.button(button_box, self, "Reset", callback=self.reloadPlot, height=25, width=352)
+        gui.separator(button_box, height=10)
+
+        font = QFont(button.font())
+        font.setItalic(True)
+        button.setFont(font)
+        palette = QPalette(button.palette())
+        palette.setColor(QPalette.ButtonText, QColor('dark red'))
+        button.setPalette(palette)
+
         button_box = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="horizontal")
         gui.button(button_box, self, "Smooth Plot", callback=self.smoothPlot, height=25)
 
