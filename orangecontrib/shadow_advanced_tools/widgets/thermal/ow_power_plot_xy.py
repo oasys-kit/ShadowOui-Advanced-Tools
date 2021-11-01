@@ -947,6 +947,13 @@ class PowerPlotXY(AutomaticElement):
                 save_file.write_coordinates(self.plotted_ticket)
                 save_file.add_plot_xy(self.plotted_ticket, dataset_name="power_density")
 
+                save_file.add_attribute("last_plotted_power", self.plot_canvas.cumulated_power_plot, dataset_name="additional_data")
+                save_file.add_attribute("last_incident_power", self.plot_canvas.cumulated_previous_power_plot, dataset_name="additional_data")
+                save_file.add_attribute("last_total_power", 0.0, dataset_name="additional_data")
+                save_file.add_attribute("last_energy_min", 0.0, dataset_name="additional_data")
+                save_file.add_attribute("last_energy_max", 0.0, dataset_name="additional_data")
+                save_file.add_attribute("last_energy_step", 0.0, dataset_name="additional_data")
+
                 save_file.close()
             except Exception as exception:
                 QMessageBox.critical(self, "Error", str(exception), QMessageBox.Ok)
@@ -1016,7 +1023,6 @@ class PowerPlotXY(AutomaticElement):
 
                 if self.IS_DEVELOP: raise exception
 
-
     def save_cumulated_data_ansys(self, file_name):
         if not self.plotted_ticket is None:
             try:
@@ -1065,6 +1071,8 @@ class PowerPlotXY(AutomaticElement):
             ticket["nrays"] = attributes["total_rays"]
             ticket["good_rays"] = attributes["good_rays"]
 
+            is_merged = False
+
             if self.plot_canvas is None:
                 self.plot_canvas = PowerPlotXYWidget()
                 self.image_box.layout().addWidget(self.plot_canvas)
@@ -1079,6 +1087,7 @@ class PowerPlotXY(AutomaticElement):
                                 ticket["bin_v_center"][0] == self.plotted_ticket["bin_v_center"][0] and \
                                 ticket["bin_v_center"][-1] == self.plotted_ticket["bin_v_center"][-1]:
                             ticket["histogram"] += self.plotted_ticket["histogram"]
+                            is_merged = True
 
                             if QMessageBox.question(self, "Load Plot", "Average with current Plot?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
                                 ticket["histogram"] *= 0.5
@@ -1101,8 +1110,14 @@ class PowerPlotXY(AutomaticElement):
                 energy_step = 0.0
 
             try:
-                self.plot_canvas.cumulated_power_plot = last_plotted_power
-                self.plot_canvas.cumulated_previous_power_plot = last_incident_power
+                if is_merged:
+                    self.plot_canvas.cumulated_power_plot += last_plotted_power
+                    self.plot_canvas.cumulated_previous_power_plot += last_incident_power
+                    last_total_power = 0.0
+                else:
+                    self.plot_canvas.cumulated_power_plot = last_plotted_power
+                    self.plot_canvas.cumulated_previous_power_plot = last_incident_power
+
                 self.plot_canvas.plot_power_density_ticket(ticket,
                                                            ticket["h_label"],
                                                            ticket["v_label"],
