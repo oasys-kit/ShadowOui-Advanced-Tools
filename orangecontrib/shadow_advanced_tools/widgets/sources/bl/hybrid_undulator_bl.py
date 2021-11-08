@@ -476,17 +476,18 @@ def __create_initial_wavefront_mesh(widget, elecBeam, energy):
 
     return wfr
 
-def __get_calculation_precision_settings(widget):
+def __get_calculation_precision_settings(widget, no_shift=False):
     # ***********Precision Parameters for SR calculation
     meth = 1  # SR calculation method: 0- "manual", 1- "auto-undulator", 2- "auto-wiggler"
     relPrec = 0.01  # relative precision
 
-    if widget.longitudinal_central_position < 0:
+    if (widget.longitudinal_central_position < 0 and not no_shift):
         zStartInteg =  - (0.5*widget.number_of_periods + 4) * widget.undulator_period + widget.longitudinal_central_position # longitudinal position to start integration (effective if < zEndInteg)
         zEndInteg = (0.5*widget.number_of_periods + 4) * widget.undulator_period + widget.longitudinal_central_position # longitudinal position to finish integration (effective if > zStartInteg)
     else:
         zStartInteg = 0  # longitudinal position to start integration (effective if < zEndInteg)
         zEndInteg = 0  # longitudinal position to finish integration (effective if > zStartInteg)
+
     npTraj = 100000  # Number of points for trajectory calculation
     useTermin = 1  # Use "terminating terms" (i.e. asymptotic expansions at zStartInteg and zEndInteg) or not (1 or 0 respectively)
     # This is the convergence parameter. Higher is more accurate but slower!!
@@ -496,7 +497,7 @@ def __get_calculation_precision_settings(widget):
 
 def __calculate_automatic_waste_position(widget, energy, do_plot=True):
     magFldCnt = __create_undulator(widget, no_shift=True)
-    arPrecParSpec = __get_calculation_precision_settings(widget)
+    arPrecParSpec = __get_calculation_precision_settings(widget, no_shift=True)
 
     undulator_length = widget.number_of_periods * widget.undulator_period
     wavelength       = (codata.h * codata.c / codata.e ) /energy
