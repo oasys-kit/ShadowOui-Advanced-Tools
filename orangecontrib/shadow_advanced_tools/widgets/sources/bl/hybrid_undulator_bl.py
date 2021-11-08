@@ -476,12 +476,17 @@ def __create_initial_wavefront_mesh(widget, elecBeam, energy):
 
     return wfr
 
-def __get_calculation_precision_settings():
+def __get_calculation_precision_settings(widget):
     # ***********Precision Parameters for SR calculation
     meth = 1  # SR calculation method: 0- "manual", 1- "auto-undulator", 2- "auto-wiggler"
     relPrec = 0.01  # relative precision
-    zStartInteg = 0  # longitudinal position to start integration (effective if < zEndInteg)
-    zEndInteg = 0  # longitudinal position to finish integration (effective if > zStartInteg)
+
+    if widget.longitudinal_central_position < 0:
+        zStartInteg =  - (0.5*widget.number_of_periods + 4) * widget.undulator_period + widget.longitudinal_central_position # longitudinal position to start integration (effective if < zEndInteg)
+        zEndInteg = (0.5*widget.number_of_periods + 4) * widget.undulator_period + widget.longitudinal_central_position # longitudinal position to finish integration (effective if > zStartInteg)
+    else:
+        zStartInteg = 0  # longitudinal position to start integration (effective if < zEndInteg)
+        zEndInteg = 0  # longitudinal position to finish integration (effective if > zStartInteg)
     npTraj = 100000  # Number of points for trajectory calculation
     useTermin = 1  # Use "terminating terms" (i.e. asymptotic expansions at zStartInteg and zEndInteg) or not (1 or 0 respectively)
     # This is the convergence parameter. Higher is more accurate but slower!!
@@ -491,7 +496,7 @@ def __get_calculation_precision_settings():
 
 def __calculate_automatic_waste_position(widget, energy, do_plot=True):
     magFldCnt = __create_undulator(widget, no_shift=True)
-    arPrecParSpec = __get_calculation_precision_settings()
+    arPrecParSpec = __get_calculation_precision_settings(widget)
 
     undulator_length = widget.number_of_periods * widget.undulator_period
     wavelength       = (codata.h * codata.c / codata.e ) /energy
@@ -698,7 +703,7 @@ def __run_SRW_calculation(widget, energy, do_cumulated_calculations=False):
     elecBeam  = __create_electron_beam(widget, distribution_type=Distribution.DIVERGENCE, position=widget.waist_position)
     wfr       = __create_initial_wavefront_mesh(widget, elecBeam, energy)
 
-    arPrecParSpec = __get_calculation_precision_settings()
+    arPrecParSpec = __get_calculation_precision_settings(widget)
 
     # 1 calculate intensity distribution ME convoluted for dimension size
     srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
