@@ -482,8 +482,8 @@ def __get_calculation_precision_settings(widget, no_shift=False):
     relPrec = 0.01  # relative precision
 
     if (widget.longitudinal_central_position < 0 and not no_shift):
-        zStartInteg =  - (0.5*widget.number_of_periods + 4) * widget.undulator_period + widget.longitudinal_central_position # longitudinal position to start integration (effective if < zEndInteg)
-        zEndInteg = (0.5*widget.number_of_periods + 4) * widget.undulator_period + widget.longitudinal_central_position # longitudinal position to finish integration (effective if > zStartInteg)
+        zStartInteg = widget.longitudinal_central_position - ((0.5*widget.number_of_periods + 8) * widget.undulator_period)  # longitudinal position to start integration (effective if < zEndInteg)
+        zEndInteg   = widget.longitudinal_central_position + ((0.5*widget.number_of_periods + 8) * widget.undulator_period)  # longitudinal position to finish integration (effective if > zStartInteg)
     else:
         zStartInteg = 0  # longitudinal position to start integration (effective if < zEndInteg)
         zEndInteg = 0  # longitudinal position to finish integration (effective if > zStartInteg)
