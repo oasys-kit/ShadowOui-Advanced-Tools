@@ -54,7 +54,7 @@ import scipy.ndimage.fourier as fourier
 from scipy.optimize import least_squares
 from numpy.polynomial.polynomial import polyval2d
 
-from PyQt5.QtWidgets import QMessageBox, QFileDialog, QInputDialog, QDialog, \
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QDialog, \
     QLabel, QVBoxLayout, QDialogButtonBox, QSizePolicy
 from PyQt5.QtGui import QTextCursor, QPixmap, QFont, QColor, QPalette
 from PyQt5.QtCore import Qt
@@ -345,7 +345,7 @@ class PowerPlotXY(AutomaticElement):
         self.poor_statistics_box_1 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=30)
         self.poor_statistics_box_2 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=30)
 
-        self.le_autosave_file_name = oasysgui.lineEdit(self.poor_statistics_box_1, self, "good_rays_limit", "Good Rays Limit", labelWidth=100,  valueType=int, orientation="horizontal")
+        oasysgui.lineEdit(self.poor_statistics_box_1, self, "good_rays_limit", "Good Rays Limit", labelWidth=100,  valueType=int, orientation="horizontal")
 
         self.kind_of_calculation_box_1 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=110)
         self.kind_of_calculation_box_2 = oasysgui.widgetBox(histograms_box, "", addSpace=False, orientation="vertical", height=110)
