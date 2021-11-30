@@ -143,10 +143,10 @@ class FootprintFileReader(oasyswidget.OWWidget):
                     additional_parameters["total_steps"]        = self.input_beam.scanned_variable_data.get_additional_parameter("total_steps")
                     additional_parameters["photon_energy_step"] = self.input_beam.scanned_variable_data.get_additional_parameter("photon_energy_step")
 
-
                 additional_parameters["is_footprint"] = True
 
                 incident_beam = self.input_beam.getOEHistory(self.input_beam._oe_number)._input_beam
+                transmitted_beam = self.input_beam
 
                 if is_scanning:
                     n_rays = len(beam_out._beam.rays[:, 0]) # lost and good!
@@ -166,13 +166,21 @@ class FootprintFileReader(oasyswidget.OWWidget):
                 elif self.kind_of_power == 1: # absorbed
                     # need a trick: put the whole intensity of one single component
 
-                    incident_intensity = incident_beam._beam.rays[:, 6]**2 + incident_beam._beam.rays[:, 7]**2 + incident_beam._beam.rays[:, 8]**2 +\
-                                         incident_beam._beam.rays[:, 15]**2 + incident_beam._beam.rays[:, 16]**2 + incident_beam._beam.rays[:, 17]**2
-                    transmitted_intensity = beam_out._beam.rays[:, 6]**2 + beam_out._beam.rays[:, 7]**2 + beam_out._beam.rays[:, 8]**2 +\
-                                            beam_out._beam.rays[:, 15]**2 + beam_out._beam.rays[:, 16]**2 + beam_out._beam.rays[:, 17]**2
+                    incident_intensity = incident_beam._beam.rays[:, 6]**2 + \
+                                         incident_beam._beam.rays[:, 7]**2 + \
+                                         incident_beam._beam.rays[:, 8]**2 +\
+                                         incident_beam._beam.rays[:, 15]**2 + \
+                                         incident_beam._beam.rays[:, 16]**2 + \
+                                         incident_beam._beam.rays[:, 17]**2
+                    transmitted_intensity = transmitted_beam._beam.rays[:, 6]**2 + \
+                                            transmitted_beam._beam.rays[:, 7]**2 + \
+                                            transmitted_beam._beam.rays[:, 8]**2 +\
+                                            transmitted_beam._beam.rays[:, 15]**2 + \
+                                            transmitted_beam._beam.rays[:, 16]**2 + \
+                                            transmitted_beam._beam.rays[:, 17]**2
 
                     electric_field = numpy.sqrt(incident_intensity - transmitted_intensity)
-                    electric_field[numpy.where(electric_field == numpy.nan)] = 0.0
+                    electric_field[numpy.where(numpy.isnan(electric_field))] = 0.0
 
                     beam_out._beam.rays[:, 6]  = electric_field
                     beam_out._beam.rays[:, 7]  = 0.0
@@ -180,6 +188,14 @@ class FootprintFileReader(oasyswidget.OWWidget):
                     beam_out._beam.rays[:, 15] = 0.0
                     beam_out._beam.rays[:, 16] = 0.0
                     beam_out._beam.rays[:, 17] = 0.0
+                elif self.kind_of_power == 2: # transmitted
+                    beam_out._beam.rays[:, 6]  = transmitted_beam._beam.rays[:, 6]
+                    beam_out._beam.rays[:, 7]  = transmitted_beam._beam.rays[:, 7]
+                    beam_out._beam.rays[:, 8]  = transmitted_beam._beam.rays[:, 8]
+                    beam_out._beam.rays[:, 15] = transmitted_beam._beam.rays[:, 15]
+                    beam_out._beam.rays[:, 16] = transmitted_beam._beam.rays[:, 16]
+                    beam_out._beam.rays[:, 17] = transmitted_beam._beam.rays[:, 17]
+
 
                 if is_scanning:
                     beam_out.setScanningData(ShadowBeam.ScanningData(self.input_beam.scanned_variable_data.get_scanned_variable_name(),
