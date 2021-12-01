@@ -45,7 +45,7 @@
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # #########################################################################
 
-import os, sys, copy
+import os, sys, copy, re
 import time
 import numpy
 import scipy.ndimage.filters as filters
@@ -1005,16 +1005,16 @@ class PowerPlotXY(AutomaticElement):
                 cbar.set_ticks([vmax] + list(ticks))
 
                 def format_number(number):
-                    order_of_magnitude = (1 if number >= 1 else -1) * int(numpy.floor(numpy.log10(numpy.abs(number))))
+                    order_of_magnitude = int(numpy.floor(numpy.log10(numpy.abs(number))))
 
                     if order_of_magnitude > 3:
-                        return round(number, 1)
+                        return str(round(number, 1))
                     elif order_of_magnitude >= 0:
-                        return round(number, 4 - order_of_magnitude)
+                        return str(round(number, 4 - order_of_magnitude))
                     else:
-                        return round(number, 3 + abs(order_of_magnitude))
+                        return ("{:.1e}").format(round(number, abs(order_of_magnitude)+1))
 
-                cbar.set_ticklabels([str(format_number(vmax))] + ["{:.1e}".format(t) for t in ticks])
+                cbar.set_ticklabels([format_number(vmax)] + ["{:.1e}".format(t) for t in ticks])
 
                 fig.savefig(os.path.splitext(file_name)[0] + ".png")
 
