@@ -2,6 +2,7 @@ import sys
 
 from matplotlib import cm
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from oasys.widgets.gui import FigureCanvas3D
 from matplotlib.figure import Figure
 try:
     from mpl_toolkits.mplot3d import Axes3D  # necessario per caricare i plot 3D
@@ -207,10 +208,12 @@ class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         def create_figure_canvas(mode="3D"):
             figure = Figure(figsize=(100, 100))
             figure.patch.set_facecolor('white')
-            if mode == "3D": figure.add_subplot(111, projection='3d')
-            else: figure.add_subplot(111)
-
-            figure_canvas = FigureCanvasQTAgg(figure)
+            if mode == "3D":
+                ax = figure.add_subplot(111, projection='3d')
+                figure_canvas = FigureCanvas3D(ax=ax, fig=figure)
+            else:
+                figure.add_subplot(111)
+                figure_canvas = FigureCanvasQTAgg(figure)
             figure_canvas.setFixedWidth(self.IMAGE_WIDTH)
             figure_canvas.setFixedHeight(self.IMAGE_HEIGHT-10)
 

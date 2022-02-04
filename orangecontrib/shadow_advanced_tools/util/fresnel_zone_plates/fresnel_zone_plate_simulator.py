@@ -64,7 +64,7 @@
 import numpy
 
 from matplotlib import cm, rcParams
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from oasys.widgets.gui import FigureCanvas3D
 from matplotlib.figure import Figure
 
 try:
@@ -388,7 +388,7 @@ class FresnelZonePlateSimulator(object):
             figure.patch.set_facecolor('white')
 
             ax = figure.add_subplot(111, projection='3d')
-            figure_canvas = FigureCanvasQTAgg(figure)
+            figure_canvas = FigureCanvas3D(ax=ax, fig=figure)
         else:
             ax = figure_canvas.figure.axes[0]
 
