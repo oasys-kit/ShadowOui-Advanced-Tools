@@ -67,7 +67,7 @@ from syned.storage_ring.light_source import LightSource
 from syned.widget.widget_decorator import WidgetDecorator
 from syned.beamline.shape import Rectangle
 
-from orangecontrib.shadow.util.shadow_objects import ShadowBeam
+from orangecontrib.shadow.util.shadow_objects import ShadowSource, ShadowBeam, ShadowOEHistoryItem
 
 from orangecontrib.shadow.widgets.gui.ow_generic_element import GenericElement
 from orangecontrib.shadow_advanced_tools.widgets.sources.attributes.hybrid_undulator_attributes import HybridUndulatorAttributes
@@ -827,6 +827,9 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
 
         try:
             beam_out, total_power = BL.run_hybrid_undulator_simulation(self, do_cumulated_calculations)
+            beam_out.getOEHistory().append(ShadowOEHistoryItem(shadow_source_start=ShadowSource.create_src(),
+                                                               shadow_source_end=ShadowSource.create_src(),
+                                                               widget_class_name="Hybrid Undulator"))
 
             self.setStatusMessage("Plotting Results")
 
