@@ -698,7 +698,7 @@ class FresnelZonePlate(GenericElement):
                                       cz_slit,
                                       file_scr_ext)
 
-        output_beam = ShadowBeam.traceFromOE(self.input_beam, empty_element, history=True)
+        output_beam = ShadowBeam.traceFromOE(self.input_beam, empty_element, history=True, widget_class_name=type(self).__name__)
 
         return output_beam
 

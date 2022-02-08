@@ -158,7 +158,8 @@ def __generate_initial_beam(widget):
     beam_out = ShadowBeam.traceFromSource(shadow_src,
                                           write_begin_file=write_begin_file,
                                           write_start_file=write_start_file,
-                                          write_end_file=write_end_file)
+                                          write_end_file=write_end_file,
+                                          widget_class_name=type(widget).__name__)
 
     # WEIRD MEMORY INITIALIZATION BY FORTRAN. JUST A FIX.
     def fix_Intensity(widget, beam_out):
