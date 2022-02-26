@@ -178,6 +178,7 @@ class PowerPlotXY(AutomaticElement):
     show_fit_plot = Setting(1)
 
     gauss_c = 0.0
+    gauss_c_fixed = 0
     gauss_A = 0.0
     gauss_x0 = 0.0
     gauss_y0 = 0.0
@@ -186,6 +187,7 @@ class PowerPlotXY(AutomaticElement):
     gauss_chisquare = 0.0
 
     pv_c = 0.0
+    pv_c_fixed = 0
     pv_A = 0.0
     pv_x0 = 0.0
     pv_y0 = 0.0
@@ -502,7 +504,11 @@ class PowerPlotXY(AutomaticElement):
         self.fit_box_2 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=340)
         self.fit_box_3 = oasysgui.widgetBox(post_box, "", addSpace=False, orientation="vertical", height=340)
 
-        le_gauss_c  = oasysgui.lineEdit(self.fit_box_1, self, "gauss_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        gauss_c_box = oasysgui.widgetBox(self.fit_box_1, "", addSpace=False, orientation="horizontal")
+
+        le_gauss_c  = oasysgui.lineEdit(gauss_c_box, self, "gauss_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        gui.checkBox(gauss_c_box, self, "gauss_c_fixed", label="c=0")
+
         le_gauss_A  = oasysgui.lineEdit(self.fit_box_1, self, "gauss_A", "A [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
         self.le_gauss_x0 = oasysgui.lineEdit(self.fit_box_1, self, "gauss_x0", "x0 ", labelWidth=200,  valueType=float, orientation="horizontal")
         self.le_gauss_y0 = oasysgui.lineEdit(self.fit_box_1, self, "gauss_y0", "y0 ", labelWidth=200,  valueType=float, orientation="horizontal")
@@ -518,7 +524,11 @@ class PowerPlotXY(AutomaticElement):
         self.le_gauss_fy.setReadOnly(True)
         self.le_gauss_chisquare.setReadOnly(True)
 
-        le_pv_c  = oasysgui.lineEdit(self.fit_box_2, self, "pv_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        pv_c_box = oasysgui.widgetBox(self.fit_box_2, "", addSpace=False, orientation="horizontal")
+
+        le_pv_c  = oasysgui.lineEdit(pv_c_box, self, "pv_c", "c [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
+        gui.checkBox(pv_c_box, self, "pv_c_fixed", label="c=0")
+
         le_pv_A  = oasysgui.lineEdit(self.fit_box_2, self, "pv_A", "A [W/mm\u00b2]", labelWidth=200,  valueType=float, orientation="horizontal")
         self.le_pv_x0 = oasysgui.lineEdit(self.fit_box_2, self, "pv_x0", "x0 ", labelWidth=200,  valueType=float, orientation="horizontal")
         self.le_pv_y0 = oasysgui.lineEdit(self.fit_box_2, self, "pv_y0", "y0 ", labelWidth=200,  valueType=float, orientation="horizontal")
@@ -1605,7 +1615,10 @@ class PowerPlotXY(AutomaticElement):
                 show = self.show_fit_plot == 1
 
                 if self.fit_algorithm == 0:
-                    pd_fit_g, params_g = get_fitted_data_gaussian(h_coord, v_coord, histogram)
+                    if self.gauss_c_fixed == 1: bounds = bounds_gaussian(c=[-1e-12, 1e-12])
+                    else:                       bounds = None
+
+                    pd_fit_g, params_g = get_fitted_data_gaussian(h_coord, v_coord, histogram, bounds=bounds)
 
                     self.gauss_c =  round(params_g[0], 4)
                     self.gauss_A =  round(params_g[1], 4)
@@ -1624,10 +1637,14 @@ class PowerPlotXY(AutomaticElement):
                         r'$f_y=%.6f$' % (self.gauss_fy,),
                     ))
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", self.gauss_chisquare, params_string)
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", self.gauss_chisquare, params_string,
+                                           formula_img_file=gauss_formula_path, zoom=0.5, xybox=(85, -20))
 
                 elif self.fit_algorithm == 1:
-                    pd_fit_pv, params_pv = get_fitted_data_pv(h_coord, v_coord, histogram)
+                    if self.pv_c_fixed == 1: bounds = bounds_pv(c=[-1e-12, 1e-12])
+                    else:                    bounds = None
+
+                    pd_fit_pv, params_pv = get_fitted_data_pv(h_coord, v_coord, histogram, bounds=bounds)
 
                     self.pv_c =  round(params_pv[0], 4)
                     self.pv_A =  round(params_pv[1], 4)
@@ -1650,7 +1667,8 @@ class PowerPlotXY(AutomaticElement):
                         r'$m_y=%.4f$' % (self.pv_my,),
                     ))
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", self.pv_chisquare, params_string)
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", self.pv_chisquare, params_string,
+                                           formula_img_file=pv_formula_path, zoom=0.42, xybox=(215, -15))
 
                 elif self.fit_algorithm == 2:
                     congruence.checkStrictlyPositiveNumber(self.poly_degree, "Degree")
@@ -1679,10 +1697,13 @@ class PowerPlotXY(AutomaticElement):
 
                 if self.IS_DEVELOP: raise e
 
-    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare, params, fontsize=14):
+    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare, params, fontsize=14, formula_img_file=None, zoom=0.5, xybox=(85, -20)):
         dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, params,
                                      file_name=None if self.autosave==0 else self.autosave_file_name,
                                      fontsize=fontsize,
+                                     formula_img_file=formula_img_file,
+                                     zoom=zoom,
+                                     xybox=xybox,
                                      parent=self)
         dialog.show()
 
@@ -1809,37 +1830,101 @@ def guess_params_gaussian(xx, yy, data):
     sigma_x = get_sigma(h_histo, xx)
     sigma_y = get_sigma(v_histo, yy)
 
-    return 0.001, data.max(), center_x, center_y, sigma_x*2.355, sigma_y*2.355
+    return 0.0, data.max(), center_x, center_y, sigma_x*2.355, sigma_y*2.355
+
+def bounds_gaussian(c=None, height=None, center_x=None, center_y=None, fwhm_x=None, fwhm_y=None):
+    bounds = [[0,         0,        -numpy.inf, -numpy.inf, 0,         0],
+              [numpy.inf, numpy.inf, numpy.inf,  numpy.inf, numpy.inf, numpy.inf]]
+
+    if not c is None:
+        bounds[0][0] = c[0]
+        bounds[1][0] = c[1]
+
+    if not height is None:
+        bounds[0][1] = height[0]
+        bounds[1][1] = height[1]
+
+    if not center_x is None:
+        bounds[0][2] = center_x[0]
+        bounds[1][2] = center_x[1]
+
+    if not center_y is None:
+        bounds[0][3] = center_y[0]
+        bounds[1][3] = center_y[1]
+
+    if not fwhm_x is None:
+        bounds[0][4] = fwhm_x[0]
+        bounds[1][4] = fwhm_x[1]
+
+    if not fwhm_y is None:
+        bounds[0][5] = fwhm_y[0]
+        bounds[1][5] = fwhm_y[1]
+
+    return bounds
 
 def guess_params_pv(xx, yy, data):
     c, height, center_x, center_y, fwhm_x, fwhm_y = guess_params_gaussian(xx, yy, data)
 
     return c, height, center_x, center_y, fwhm_x, fwhm_y, 0.5, 0.5
 
+def bounds_pv(c=None, height=None, center_x=None, center_y=None, fwhm_x=None, fwhm_y=None, mixing_x=None, mixing_y=None):
+    bounds = [[0,         0,        -numpy.inf, -numpy.inf, 0,         0        , 0, 0],
+              [numpy.inf, numpy.inf, numpy.inf,  numpy.inf, numpy.inf, numpy.inf, 1, 1]]
+
+    if not c is None:
+        bounds[0][0] = c[0]
+        bounds[1][0] = c[1]
+
+    if not height is None:
+        bounds[0][1] = height[0]
+        bounds[1][1] = height[1]
+
+    if not center_x is None:
+        bounds[0][2] = center_x[0]
+        bounds[1][2] = center_x[1]
+
+    if not center_y is None:
+        bounds[0][3] = center_y[0]
+        bounds[1][3] = center_y[1]
+
+    if not fwhm_x is None:
+        bounds[0][4] = fwhm_x[0]
+        bounds[1][4] = fwhm_x[1]
+
+    if not fwhm_y is None:
+        bounds[0][5] = fwhm_y[0]
+        bounds[1][5] = fwhm_y[1]
+        
+    if not mixing_x is None:
+        bounds[0][6] = mixing_x[0]
+        bounds[1][6] = mixing_x[1]
+
+    if not mixing_y is None:
+        bounds[0][7] = mixing_y[0]
+        bounds[1][7] = mixing_y[1]
+
+    return bounds
+
 def guess_params_poly(degree):
     return numpy.ones(int(degree + 1)**2).tolist()
 
-def fit_gaussian(xx, yy, pd, guess_params=None):
+def fit_gaussian(xx, yy, pd, guess_params=None, bounds=None):
     error_function = lambda p: numpy.ravel(gaussian(*p)(*numpy.meshgrid(xx, yy)) - pd)
 
-    bounds = [[0,          0,         -numpy.inf, -numpy.inf, 0,         0],
-              [numpy.inf,  numpy.inf,  numpy.inf,  numpy.inf, numpy.inf, numpy.inf]]
+    if guess_params is None: guess_params = guess_params_gaussian(xx, yy, pd)
+    if bounds is None:       bounds = bounds_gaussian()
 
-    optimized_result = least_squares(fun=error_function,
-                                     x0=guess_params_gaussian(xx, yy, pd) if guess_params is None else guess_params,
-                                     bounds=bounds)
+    optimized_result = least_squares(fun=error_function, x0=guess_params, bounds=bounds)
 
     return optimized_result.x
 
-def fit_pseudovoigt(xx, yy, pd, guess_params=None):
+def fit_pseudovoigt(xx, yy, pd, guess_params=None, bounds=None):
     error_function = lambda p: numpy.ravel(pseudovoigt(*p)(*numpy.meshgrid(xx, yy)) - pd)
 
-    bounds = [[0,         0,        -numpy.inf, -numpy.inf, 0,         0,         0, 0],
-              [numpy.inf, numpy.inf, numpy.inf,  numpy.inf, numpy.inf, numpy.inf, 1, 1]]
+    if guess_params is None: guess_params = guess_params_pv(xx, yy, pd)
+    if bounds is None:       bounds = bounds_pv()
 
-    optimized_result = least_squares(fun=error_function,
-                                     x0=guess_params_pv(xx, yy, pd) if guess_params is None else guess_params,
-                                     bounds=bounds)
+    optimized_result = least_squares(fun=error_function, x0=guess_params, bounds=bounds)
 
     return optimized_result.x
 
@@ -1856,14 +1941,14 @@ def fit_polynomial(xx, yy, pd, degree=4, guess_params=None):
 
     return optimized_result.x
 
-def get_fitted_data_gaussian(xx, yy, pd, guess_params=None):
-    params = fit_gaussian(xx, yy, pd, guess_params)
+def get_fitted_data_gaussian(xx, yy, pd, guess_params=None, bounds=None):
+    params = fit_gaussian(xx, yy, pd, guess_params, bounds)
     fit = gaussian(*params)
 
     return fit(*numpy.meshgrid(xx, yy)), params
 
-def get_fitted_data_pv(xx, yy, pd, guess_params=None):
-    params = fit_pseudovoigt(xx, yy, pd, guess_params)
+def get_fitted_data_pv(xx, yy, pd, guess_params=None, bounds=None):
+    params = fit_pseudovoigt(xx, yy, pd, guess_params, bounds)
     fit = pseudovoigt(*params)
 
     return fit(*numpy.meshgrid(xx, yy)), params
@@ -1875,14 +1960,14 @@ def get_fitted_data_poly(xx, yy, pd, degree=4, guess_params=None):
     return fit(*numpy.meshgrid(xx, yy)), params
 
 
+formulas_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "fit_formulas.png")
+
 class ShowFitFormulasDialog(QDialog):
 
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
         self.setWindowTitle('Fit Formulas')
         layout = QVBoxLayout(self)
-
-        formulas_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "fit_formulas.png")
 
         label = QLabel("")
         label.setAlignment(Qt.AlignCenter)
@@ -1901,10 +1986,14 @@ from matplotlib.figure import Figure
 
 from matplotlib import gridspec
 
+gauss_formula_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "gauss_formula.png")
+pv_formula_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "pv_formula.png")
+
 
 class ShowFitResultDialog(QDialog):
 
-    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, params_string, file_name=None, fontsize=14, parent=None):
+    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, params_string, file_name=None,
+                 fontsize=14, formula_img_file=None, zoom=0.5, xybox=(85, -20), parent=None):
         QDialog.__init__(self, parent)
         self.setWindowTitle('Fit Result')
         layout = QVBoxLayout(self)
@@ -1940,6 +2029,24 @@ class ShowFitResultDialog(QDialog):
         ax[1].set_ylabel("V [mm]")
         ax[1].set_zlabel("Power Density [W/mm\u00b2]")
         ax[1].axes.mouse_init()
+
+        if not formula_img_file is None:
+            from matplotlib.cbook import get_sample_data
+            from matplotlib.pyplot import imread
+            from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+            fn = get_sample_data(formula_img_file, asfileobj=False)
+            arr_img = imread(fn, format='png')
+
+            imagebox = OffsetImage(arr_img, zoom=zoom)
+            imagebox.image.axes = ax[0]
+
+            ab = AnnotationBbox(imagebox, (0.0, 0.0),
+                                xybox=xybox,
+                                xycoords='data',
+                                boxcoords="offset points",
+                                arrowprops=dict(arrowstyle="->"))
+            ax[0].add_artist(ab)
 
         figure_canvas = FigureCanvasQTAgg(figure)
 
