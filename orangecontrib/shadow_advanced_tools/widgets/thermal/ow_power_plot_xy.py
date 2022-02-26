@@ -1637,7 +1637,7 @@ class PowerPlotXY(AutomaticElement):
                         r'$f_y=%.6f$' % (self.gauss_fy,),
                     ))
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", self.gauss_chisquare, params_string,
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_g, "Gaussian", "gauss", self.gauss_chisquare, params_string,
                                            formula_img_file=gauss_formula_path, zoom=0.5, xybox=(85, -20))
 
                 elif self.fit_algorithm == 1:
@@ -1667,7 +1667,7 @@ class PowerPlotXY(AutomaticElement):
                         r'$m_y=%.4f$' % (self.pv_my,),
                     ))
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", self.pv_chisquare, params_string,
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_pv, "Pseudo-Voigt", "p-v", self.pv_chisquare, params_string,
                                            formula_img_file=pv_formula_path, zoom=0.42, xybox=(215, -15))
 
                 elif self.fit_algorithm == 2:
@@ -1681,25 +1681,28 @@ class PowerPlotXY(AutomaticElement):
                     for i in range(params_poly.shape[0]):
                         for j in range(params_poly.shape[1]):
                             param = params_poly[i, j]
-                            params_string.append(r'c%d,%d=%.4f$' %   (i, j, param,))
-                            params_string_mpl.append(r'$c_{%d,%d}=%.4f$' %   (i, j, param,))
+                            params_string.append(r'c%d,%d=%.4f' % (i, j, param,))
+                            params_string_mpl.append(r'c_{%d,%d}=%.4f' % (i, j, param,))
 
-                    params_string = '\n'.join(params_string)
+                    params_string     = '\n'.join(params_string)
                     params_string_mpl = '\n'.join(params_string_mpl)
 
                     self.poly_coefficients_text.setText(params_string)
                     self.poly_chisquare = round(chisquare(histogram, pd_fit_poly, len(params_poly)), 4)
 
-                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", self.poly_chisquare, params_string_mpl, fontsize=10)
+                    if show: self.plot_fit(h_coord, v_coord, histogram, pd_fit_poly, "Polynomial", "poly", self.poly_chisquare, params_string_mpl, fontsize=10,
+                                           formula_img_file=poly_formula_path, zoom=0.5, xybox=(25, -20))
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e), QMessageBox.Ok)
 
                 if self.IS_DEVELOP: raise e
 
-    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, chisquare, params, fontsize=14, formula_img_file=None, zoom=0.5, xybox=(85, -20)):
+    def plot_fit(self, xx, yy, pd, pd_fit, algorithm, suffix, chisquare, params, fontsize=14,
+                 formula_img_file=None, zoom=0.5, xybox=(85, -20)):
         dialog = ShowFitResultDialog(xx, yy, pd, pd_fit, algorithm, chisquare, params,
                                      file_name=None if self.autosave==0 else self.autosave_file_name,
+                                     suffix=suffix,
                                      fontsize=fontsize,
                                      formula_img_file=formula_img_file,
                                      zoom=zoom,
@@ -1988,17 +1991,18 @@ from matplotlib import gridspec
 
 gauss_formula_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "gauss_formula.png")
 pv_formula_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "pv_formula.png")
-
+poly_formula_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "poly_formula.png")
 
 class ShowFitResultDialog(QDialog):
 
-    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, params_string, file_name=None,
+    def __init__(self, xx, yy, pd, pd_fit, algorithm, chisquare, params_string, file_name=None, suffix=None,
                  fontsize=14, formula_img_file=None, zoom=0.5, xybox=(85, -20), parent=None):
         QDialog.__init__(self, parent)
         self.setWindowTitle('Fit Result')
         layout = QVBoxLayout(self)
 
-        self.file_name = None if file_name is None else congruence.checkDir(os.path.splitext(file_name)[0] + "_fit.png")
+        self.file_name = None if file_name is None else \
+            congruence.checkDir(os.path.splitext(file_name)[0] + "_fit" + ("" if suffix is None else ("_" + suffix)) + ".png")
 
         figure = Figure(figsize=(4, 8))
         figure.patch.set_facecolor('white')
