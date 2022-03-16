@@ -44,9 +44,11 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE         #
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # ----------------------------------------------------------------------- #
+
 import numpy
 from scipy.interpolate import interp2d
 from scipy.optimize import curve_fit
+from scipy import integrate
 
 from orangecontrib.shadow.util.shadow_objects import ShadowBeam
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
@@ -54,12 +56,6 @@ from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 from Shadow import ShadowTools as ST
 
 from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.bender_data_to_plot import BenderDataToPlot
-
-TRAPEZIUM = 0
-RECTANGLE = 1
-
-SINGLE_MOMENTUM = 0
-DOUBLE_MOMENTUM = 1
 
 def apply_bender_surface(widget, input_beam, shadow_oe):
     shadow_oe_temp  = shadow_oe.duplicate()
@@ -79,12 +75,9 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
 
     bender_data_to_plot.x = x
 
-    widget.M1_out = round(bender_parameter[0], int(6 * widget.workspace_units_to_mm))
-    if widget.shape == TRAPEZIUM:
-        widget.e_out = round(bender_parameter[1], 5)
-        if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = round(bender_parameter[2], 5)
-    elif widget.shape == RECTANGLE:
-        if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = round(bender_parameter[1], 5)
+    widget.K0_out = bender_parameter[0]
+    widget.eta_out = bender_parameter[1]
+    widget.W2_out = bender_parameter[2] # round(bender_parameter[2], int(6 * widget.workspace_units_to_mm))
 
     if widget.modified_surface > 0:
         x_e, y_e, z_e = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name)
@@ -139,10 +132,14 @@ def __calculate_ideal_surface(widget, shadow_oe, sign=-1):
     return x, y, z.T
 
 def __calculate_bender_correction(widget, y, z):
-    b0 = widget.dim_x_plus + widget.dim_x_minus
-    L = widget.dim_y_plus + widget.dim_y_minus  # add optimization length
+    W1 = widget.dim_x_plus + widget.dim_x_minus
+    L  = widget.dim_y_plus + widget.dim_y_minus  # add optimization length
 
-    # flip the coordinate system to be consistent with Mike's formulas
+    p = widget.object_side_focal_distance
+    q = widget.image_side_focal_distance
+    grazing_angle = numpy.radians(90 - widget.incidence_angle_respect_to_normal)
+
+    # TO BE VERIFIED
     ideal_profile = z[0, :][::-1]  # one row is the profile of the cylinder, enough for the minimizer
     ideal_profile += -ideal_profile[0] + ((L / 2 + y) * (ideal_profile[0] - ideal_profile[-1])) / L  # Rotation
 
@@ -157,79 +154,20 @@ def __calculate_bender_correction(widget, y, z):
     epsilon_minus = 1 - 1e-8
     epsilon_plus  = 1 + 1e-8
 
-    Eh_3 = widget.E * widget.h ** 3
+    initial_guess    = [widget.K0, widget.eta, widget.W2]
+    constraints     =  [[widget.K0_min if widget.K0_fixed == False else (widget.K0 * epsilon_minus),
+                         widget.eta_min if widget.eta_fixed == False else (widget.eta * epsilon_minus),
+                         widget.W2_min if widget.W2_fixed == False else (widget.W2 * epsilon_minus)],
+                        [widget.K0_max if widget.K0_fixed == False else (widget.K0 * epsilon_plus),
+                         widget.eta_max if widget.eta_fixed == False else (widget.eta * epsilon_plus),
+                         widget.W2_max if widget.W2_fixed == False else (widget.W2 * epsilon_plus)]
+                       ]
 
-    initial_guess = None
-    constraints = None
-    bender_function = None
-
-    if widget.shape == TRAPEZIUM:
-        def general_bender_function(Y, M1, e, ratio):
-            M2 = M1 * ratio
-            A = (M1 + M2) / 2
-            B = (M1 - M2) / L
-            C = Eh_3 * (2 * b0 + e * b0) / 24
-            D = Eh_3 * e * b0 / (12 * L)
-            H = (A * D + B * C) / D ** 2
-            CDLP = C + D * L / 2
-            CDLM = C - D * L / 2
-            F = (H / L) * ((CDLM * numpy.log(CDLM) - CDLP * numpy.log(CDLP)) / D + L)
-            G = (-H * ((CDLM * numpy.log(CDLM) + CDLP * numpy.log(CDLP))) + (B * L ** 2) / 4) / (2 * D)
-            CDY = C + D * Y
-
-            return H * ((CDY / D) * numpy.log(CDY) - Y) - (B * Y ** 2) / (2 * D) + F * Y + G
-
-        def bender_function_2m(Y, M1, e, ratio):
-            return general_bender_function(Y, M1, e, ratio)
-
-        def bender_function_1m(Y, M1, e):
-            return general_bender_function(Y, M1, e, 1.0)
-
-        if widget.kind_of_bender == SINGLE_MOMENTUM:
-            bender_function = bender_function_1m
-            initial_guess = [widget.M1, widget.e]
-            constraints = [[widget.M1_min if widget.M1_fixed == False else (widget.M1 * epsilon_minus),
-                            widget.e_min if widget.e_fixed == False else (widget.e * epsilon_minus)],
-                           [widget.M1_max if widget.M1_fixed == False else (widget.M1 * epsilon_plus),
-                            widget.e_max if widget.e_fixed == False else (widget.e * epsilon_plus)]]
-        elif widget.kind_of_bender == DOUBLE_MOMENTUM:
-            bender_function = bender_function_2m
-            initial_guess = [widget.M1, widget.e, widget.ratio]
-            constraints = [[widget.M1_min if widget.M1_fixed == False else (widget.M1 * epsilon_minus),
-                            widget.e_min if widget.e_fixed == False else (widget.e * epsilon_minus),
-                            widget.ratio_min if widget.ratio_fixed == False else (widget.ratio * epsilon_minus)],
-                           [widget.M1_max if widget.M1_fixed == False else (widget.M1 * epsilon_plus),
-                            widget.e_max if widget.e_fixed == False else (widget.e * epsilon_plus),
-                            widget.ratio_max if widget.ratio_fixed == False else (widget.ratio * epsilon_plus)]]
-    elif widget.shape == RECTANGLE:
-        def general_bender_function(Y, M1, ratio):
-            M2 = M1 * ratio
-            A = (M1 + M2) / 2
-            B = (M1 - M2) / L
-            C = Eh_3 * b0 / 12
-            F = (B * L ** 2) / (24 * C)
-            G = -(A * L ** 2) / (8 * C)
-
-            return -(B * Y ** 3) / (6 * C) + (A * Y ** 2) / (2 * C) + F * Y + G
-
-        def bender_function_2m(Y, M1, ratio):
-            return general_bender_function(Y, M1, ratio)
-
-        def bender_function_1m(Y, M1):
-            return general_bender_function(Y, M1, 1.0)
-
-        if widget.kind_of_bender == SINGLE_MOMENTUM:
-            bender_function = bender_function_1m
-            initial_guess = [widget.M1]
-            constraints = [[widget.M1_min if widget.M1_fixed == False else (widget.M1 * epsilon_minus)],
-                           [widget.M1_max if widget.M1_fixed == False else (widget.M1 * epsilon_plus)]]
-        elif widget.kind_of_bender == DOUBLE_MOMENTUM:
-            bender_function = bender_function_2m
-            initial_guess = [widget.M1, widget.ratio]
-            constraints = [[widget.M1_min if widget.M1_fixed == False else (widget.M1 * epsilon_minus),
-                            widget.ratio_min if widget.ratio_fixed == False else (widget.ratio * epsilon_minus)],
-                           [widget.M1_max if widget.M1_fixed == False else (widget.M1 * epsilon_plus),
-                            widget.ratio_max if widget.ratio_fixed == False else (widget.ratio * epsilon_plus)]]
+    def bender_function(y, K0, eta, W2):
+        return __bender_slope_error(y, p, q, grazing_angle,
+                                    K0,
+                                    eta,
+                                    alpha=__calculate_taper_factor(W1, W2, L, p, q, grazing_angle))
 
     for i in range(widget.n_fit_steps):
         parameters, _ = curve_fit(f=bender_function,
@@ -240,12 +178,10 @@ def __calculate_bender_correction(widget, y, z):
                                   method='trf')
         initial_guess = parameters
 
-    if len(parameters) == 1:
-        bender_profile = bender_function(y, parameters[0])
-    elif len(parameters) == 2:
-        bender_profile = bender_function(y, parameters[0], parameters[1])
-    else:
-        bender_profile = bender_function(y, parameters[0], parameters[1], parameters[2])
+    bender_profile = __bender_profile(y, p, q, grazing_angle,
+                                      K0=parameters[0],
+                                      eta=parameters[1],
+                                      alpha = __calculate_taper_factor(W1, parameters[2], L, p, q, grazing_angle))
 
     # rotate back to Shadow system
     bender_profile = bender_profile[::-1]
@@ -272,3 +208,73 @@ def __calculate_bender_correction(widget, y, z):
                                                                      "Correction Profile 1D, r.m.s. = " + str(rms) + " nm" + ("" if widget.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)"))],
                                                              z_bender_correction_no_figure_error=z_bender_correction)
 
+
+def __focal_distance(p, q):
+    return p*q/(p+q)
+
+def __demagnification_factor(p, q):
+    return p/q
+
+def __mu_nu(m):
+    return (m - 1) / (m + 1), m/(m+1)**2
+
+def __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu):
+    return 2*fprime*K0id*((2 * nu * (y / fprime) + mu) * numpy.sqrt(1 - mu * (y / fprime) - nu * (y / fprime) ** 2) - mu)
+
+def __calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
+    f = p * q / (p + q)
+    fprime = f / numpy.cos(grazing_angle)
+
+    # W  = W0 (1 - alpha (x/f'))
+    #
+    # W1 = W0 (1 + alpha (L/2f') )
+    # W2 = W0 (1 - alpha (L/2f') )
+    #
+    # W1 - W2 = alpha (L/f')
+    #
+    # -> alpha =  (W1 - W2) * (f'/L)
+
+    return (W1 - W2) * (fprime / L)
+
+def __calculate_bender_slope_variation(y, fprime, K0, eta, alpha):
+    return -(K0*fprime/alpha**2)*(eta * alpha * (y / fprime) + (eta + alpha) * numpy.log(1 - (alpha * y / fprime)))
+
+def __bender_slope_error(y, p, q, grazing_angle, K0, eta, alpha):
+    mu, nu = __mu_nu(__demagnification_factor(p, q))
+    fprime = __focal_distance(p, q)/numpy.cos(grazing_angle)
+    K0id   = numpy.tan(grazing_angle)/(2*fprime)
+
+    return __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu) - __calculate_bender_slope_variation(y, fprime, K0, eta, alpha)
+
+def __bender_profile(y, p, q, grazing_angle, K0, eta, alpha):
+    profile = numpy.zeros(len(y))
+
+    fprime = __focal_distance(p, q)/numpy.cos(grazing_angle)
+
+    def integrand(x): return __calculate_bender_slope_variation(x, fprime, K0, eta, alpha)
+
+    for i in range(len(y)):  profile[i] = integrate.quad(func=integrand, a=y[0], b=y[i])
+
+    return profile
+
+# -----------------------------------------------
+# q = focus distance (from mirror center) (1/p + 1/q = 1/f lenses equation)
+# eta = bender asymmetry factor (from slope minimization)
+# K0 = 1/R (radius of curvature at the center)
+# E0 = Young's modulus
+# L = lenght of the mirror
+# r = distance between inner ond outer rods
+# ----------------------------------------------------------------
+def __calculate_bender_forces(q, eta, K0, E0, L, r):
+    M0 = K0*E0
+    F1 = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
+    F2 = (M0/r) * (1 + (eta*(L + 2*r)/(2*q)))
+
+    return F1, F2
+
+# -----------------------------------------------
+# F = bender pusher applied force
+# k = elastic constant F = kh
+# -----------------------------------------------
+def calculate_bender_pusher_height(F, k):
+    return F/k
