@@ -69,15 +69,20 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
                            write_end_file=0,
                            widget_class_name=type(widget).__name__)
 
-    x, y, z = __calculate_ideal_surface(widget, shadow_oe_temp)
+    x = numpy.linspace(-widget.dim_x_minus, widget.dim_x_plus, widget.bender_bin_x + 1)
+    y = numpy.linspace(-widget.dim_y_minus, widget.dim_y_plus, widget.bender_bin_y + 1)
 
-    bender_parameter, z_bender_correction, bender_data_to_plot = __calculate_bender_correction(widget, y, z)
+    bender_parameter, z_bender_correction, bender_data_to_plot = __calculate_bender_correction(widget, y, (len(x), len(y)))
 
     bender_data_to_plot.x = x
 
-    widget.K0_out = bender_parameter[0]
+    widget.R0_out  = round(bender_parameter[0], 5)
     widget.eta_out = bender_parameter[1]
-    widget.W2_out = bender_parameter[2] # round(bender_parameter[2], int(6 * widget.workspace_units_to_mm))
+    widget.W2_out  = round(bender_parameter[2], 3)
+
+    widget.alpha = bender_parameter[3]
+    widget.F1    = bender_parameter[4]
+    widget.F2    = bender_parameter[5]
 
     if widget.modified_surface > 0:
         x_e, y_e, z_e = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name)
@@ -105,33 +110,7 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
 
     return shadow_oe, bender_data_to_plot
 
-def __calculate_ideal_surface(widget, shadow_oe, sign=-1):
-    x = numpy.linspace(-widget.dim_x_minus, widget.dim_x_plus, widget.bender_bin_x + 1)
-    y = numpy.linspace(-widget.dim_y_minus, widget.dim_y_plus, widget.bender_bin_y + 1)
-
-    c1 = round(shadow_oe._oe.CCC[0], 10)
-    c2 = round(shadow_oe._oe.CCC[1], 10)
-    c3 = round(shadow_oe._oe.CCC[2], 10)
-    c4 = round(shadow_oe._oe.CCC[3], 10)
-    c5 = round(shadow_oe._oe.CCC[4], 10)
-    c6 = round(shadow_oe._oe.CCC[5], 10)
-    c7 = round(shadow_oe._oe.CCC[6], 10)
-    c8 = round(shadow_oe._oe.CCC[7], 10)
-    c9 = round(shadow_oe._oe.CCC[8], 10)
-    c10 = round(shadow_oe._oe.CCC[9], 10)
-
-    xx, yy = numpy.meshgrid(x, y)
-
-    c = c1 * (xx ** 2) + c2 * (yy ** 2) + c4 * xx * yy + c7 * xx + c8 * yy + c10
-    b = c5 * yy + c6 * xx + c9
-    a = c3
-
-    z = (-b + sign * numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    z[b ** 2 - 4 * a * c < 0] = numpy.nan
-
-    return x, y, z.T
-
-def __calculate_bender_correction(widget, y, z):
+def __calculate_bender_correction(widget, y, z_shape):
     W1 = widget.dim_x_plus + widget.dim_x_minus
     L  = widget.dim_y_plus + widget.dim_y_minus  # add optimization length
 
@@ -139,53 +118,58 @@ def __calculate_bender_correction(widget, y, z):
     q = widget.image_side_focal_distance
     grazing_angle = numpy.radians(90 - widget.incidence_angle_respect_to_normal)
 
-    # TO BE VERIFIED
-    ideal_profile = z[0, :][::-1]  # one row is the profile of the cylinder, enough for the minimizer
-    ideal_profile += -ideal_profile[0] + ((L / 2 + y) * (ideal_profile[0] - ideal_profile[-1])) / L  # Rotation
-
     if widget.which_length == 0:
         y_fit = y
-        ideal_profile_fit = ideal_profile
     else:
         cursor = numpy.where(numpy.logical_and(y >= -widget.optimized_length / 2, y <= widget.optimized_length / 2))
         y_fit = y[cursor]
-        ideal_profile_fit = ideal_profile[cursor]
+
+    ideal_slope_profile_fit = __ideal_slope_profile(y_fit, p, q, grazing_angle)
 
     epsilon_minus = 1 - 1e-8
     epsilon_plus  = 1 + 1e-8
 
-    initial_guess    = [widget.K0, widget.eta, widget.W2]
-    constraints     =  [[widget.K0_min if widget.K0_fixed == False else (widget.K0 * epsilon_minus),
+    initial_guess    = [widget.R0, widget.eta, widget.W2]
+    constraints     =  [[widget.R0_min if widget.R0_fixed == False else (widget.R0 * epsilon_minus),
                          widget.eta_min if widget.eta_fixed == False else (widget.eta * epsilon_minus),
                          widget.W2_min if widget.W2_fixed == False else (widget.W2 * epsilon_minus)],
-                        [widget.K0_max if widget.K0_fixed == False else (widget.K0 * epsilon_plus),
+                        [widget.R0_max if widget.R0_fixed == False else (widget.R0 * epsilon_plus),
                          widget.eta_max if widget.eta_fixed == False else (widget.eta * epsilon_plus),
                          widget.W2_max if widget.W2_fixed == False else (widget.W2 * epsilon_plus)]
                        ]
 
-    def bender_function(y, K0, eta, W2):
-        return __bender_slope_error(y, p, q, grazing_angle,
-                                    K0,
-                                    eta,
-                                    alpha=__calculate_taper_factor(W1, W2, L, p, q, grazing_angle))
+    def bender_function(x, R0, eta, W2):
+        return __bender_slope_profile(x, p, q, grazing_angle, W1, L, R0 / widget.workspace_units_to_m, eta, W2 / widget.workspace_units_to_mm)
 
     for i in range(widget.n_fit_steps):
         parameters, _ = curve_fit(f=bender_function,
                                   xdata=y_fit,
-                                  ydata=ideal_profile_fit,
+                                  ydata=ideal_slope_profile_fit,
                                   p0=initial_guess,
                                   bounds=constraints,
                                   method='trf')
         initial_guess = parameters
 
-    bender_profile = __bender_profile(y, p, q, grazing_angle,
-                                      K0=parameters[0],
-                                      eta=parameters[1],
-                                      alpha = __calculate_taper_factor(W1, parameters[2], L, p, q, grazing_angle))
+    alpha = __calculate_taper_factor(W1, parameters[2] / widget.workspace_units_to_mm, L, p, q, grazing_angle)
 
-    # rotate back to Shadow system
-    bender_profile = bender_profile[::-1]
-    ideal_profile = ideal_profile[::-1]
+    bender_profile = __bender_height_profile(y, p, q, grazing_angle,
+                                             R0=parameters[0]/widget.workspace_units_to_m,  # here in workspace units
+                                             eta=parameters[1],
+                                             alpha=alpha)
+
+    F1, F2 = __calculate_bender_forces(q, parameters[1], parameters[0]/widget.workspace_units_to_m, widget.E, L, widget.r)
+
+    parameters = numpy.append(parameters, round(alpha, 3))
+    parameters = numpy.append(parameters, round(F1, 6))
+    parameters = numpy.append(parameters, round(F2, 6))
+
+    ideal_profile  = __ideal_height_profile(y, p, q, grazing_angle)
+
+    lower_point = numpy.min(ideal_profile)
+
+    # back to Shadow system
+    bender_profile += lower_point
+    ideal_profile  += lower_point
 
     # from here it's Shadow Axis system
     correction_profile = ideal_profile - bender_profile
@@ -196,7 +180,7 @@ def __calculate_bender_correction(widget, y, z):
     rms = round(correction_profile.std() * 1e9 * widget.workspace_units_to_m, 6)
     if widget.which_length == 1: rms_opt = round(correction_profile_fit.std() * 1e9 * widget.workspace_units_to_m, 6)
 
-    z_bender_correction = numpy.zeros(z.shape)
+    z_bender_correction = numpy.zeros(z_shape)
 
     for i in range(z_bender_correction.shape[0]): z_bender_correction[i, :] = numpy.copy(correction_profile)
 
@@ -208,7 +192,6 @@ def __calculate_bender_correction(widget, y, z):
                                                                      "Correction Profile 1D, r.m.s. = " + str(rms) + " nm" + ("" if widget.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)"))],
                                                              z_bender_correction_no_figure_error=z_bender_correction)
 
-
 def __focal_distance(p, q):
     return p*q/(p+q)
 
@@ -219,41 +202,54 @@ def __mu_nu(m):
     return (m - 1) / (m + 1), m/(m+1)**2
 
 def __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu):
-    return 2*fprime*K0id*((2 * nu * (y / fprime) + mu) * numpy.sqrt(1 - mu * (y / fprime) - nu * (y / fprime) ** 2) - mu)
+    sv = 2*fprime*K0id*((2 * nu * (y / fprime) + mu) / numpy.sqrt(1 - mu * (y / fprime) - nu * (y / fprime) ** 2) - mu)
+    return sv
 
 def __calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
     f = p * q / (p + q)
     fprime = f / numpy.cos(grazing_angle)
 
-    # W  = W0 (1 - alpha (x/f'))
-    #
-    # W1 = W0 (1 + alpha (L/2f') )
-    # W2 = W0 (1 - alpha (L/2f') )
-    #
-    # W1 - W2 = alpha (L/f')
-    #
-    # -> alpha =  (W1 - W2) * (f'/L)
+    # W2 = W1(1 - alpha L/f')
+    # W2/W1 - 1 = - alpha  L/f'
+    # f'/L ( 1 - W2/W1) = alpha
 
-    return (W1 - W2) * (fprime / L)
+    alpha = (1 - W2/W1) * (fprime / L)
+
+    return alpha
 
 def __calculate_bender_slope_variation(y, fprime, K0, eta, alpha):
-    return -(K0*fprime/alpha**2)*(eta * alpha * (y / fprime) + (eta + alpha) * numpy.log(1 - (alpha * y / fprime)))
+    sv = -(K0*fprime/alpha**2)*(eta * alpha * (y / fprime) + (eta + alpha) * numpy.log(1 - (alpha * y / fprime)))
+    return sv
 
-def __bender_slope_error(y, p, q, grazing_angle, K0, eta, alpha):
+def __ideal_slope_profile(y, p, q, grazing_angle):
     mu, nu = __mu_nu(__demagnification_factor(p, q))
     fprime = __focal_distance(p, q)/numpy.cos(grazing_angle)
     K0id   = numpy.tan(grazing_angle)/(2*fprime)
 
-    return __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu) - __calculate_bender_slope_variation(y, fprime, K0, eta, alpha)
+    return __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu)
 
-def __bender_profile(y, p, q, grazing_angle, K0, eta, alpha):
+def __ideal_height_profile(y, p, q, grazing_angle):
+    mu, nu = __mu_nu(__demagnification_factor(p, q))
+    fprime = __focal_distance(p, q)/numpy.cos(grazing_angle)
+    K0id   = numpy.tan(grazing_angle)/(2*fprime)
+
     profile = numpy.zeros(len(y))
+    for i in range(len(y)):
+        profile[i] = integrate.quad(func=(lambda x: __calculate_ideal_slope_variation(x, fprime, K0id, mu, nu)), a=y[0], b=y[i])[0]
 
+    return profile
+
+def __bender_slope_profile(y, p, q, grazing_angle, W1, L, R0, eta, W2):
+    fprime = __focal_distance(p, q) / numpy.cos(grazing_angle)
+
+    return __calculate_bender_slope_variation(y, fprime, 1 / R0, eta, alpha=__calculate_taper_factor(W1, W2, L, p, q, grazing_angle))
+
+def __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha):
     fprime = __focal_distance(p, q)/numpy.cos(grazing_angle)
 
-    def integrand(x): return __calculate_bender_slope_variation(x, fprime, K0, eta, alpha)
-
-    for i in range(len(y)):  profile[i] = integrate.quad(func=integrand, a=y[0], b=y[i])
+    profile = numpy.zeros(len(y))
+    for i in range(len(y)):
+        profile[i] = integrate.quad(func=(lambda x: __calculate_bender_slope_variation(x, fprime, 1/R0, eta, alpha)), a=y[0], b=y[i])[0]
 
     return profile
 
@@ -265,16 +261,9 @@ def __bender_profile(y, p, q, grazing_angle, K0, eta, alpha):
 # L = lenght of the mirror
 # r = distance between inner ond outer rods
 # ----------------------------------------------------------------
-def __calculate_bender_forces(q, eta, K0, E0, L, r):
-    M0 = K0*E0
+def __calculate_bender_forces(q, eta, R0, E0, L, r):
+    M0 = E0/R0
     F1 = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
     F2 = (M0/r) * (1 + (eta*(L + 2*r)/(2*q)))
 
     return F1, F2
-
-# -----------------------------------------------
-# F = bender pusher applied force
-# k = elastic constant F = kh
-# -----------------------------------------------
-def calculate_bender_pusher_height(F, k):
-    return F/k

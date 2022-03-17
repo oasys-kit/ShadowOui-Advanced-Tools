@@ -26,7 +26,7 @@ from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.double_rod_
 class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     name = "Double-Rod Bendable Ellipsoid Mirror"
     description = "Shadow OE: Double-Rod Bendable Ellipsoid Mirror"
-    icon = "icons/bendable_ellipsoid_mirror.png"
+    icon = "icons/double_rod_bendable_ellipsoid_mirror.png"
     maintainer = "Luca Rebuffi"
     maintainer_email = "lrebuffi(@at@)anl.gov"
     priority = 7
@@ -82,25 +82,29 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     optimized_length = Setting(0.0)
     n_fit_steps = Setting(3)
 
-    K0     = Setting(0.01)
+    R0     = Setting(45)
     eta    = Setting(0.25)
     W2     = Setting(40.0)
 
-    K0_out    = 0.0
+    R0_out    = 0.0
     eta_out   = 0.0
     W2_out     = 0.0
 
-    K0_fixed    = Setting(False)
+    R0_fixed    = Setting(False)
     eta_fixed = Setting(False)
     W2_fixed     = Setting(False)
 
-    K0_min    = Setting(0.0)
+    R0_min    = Setting(0.0)
     eta_min = Setting(0.0)
     W2_min     = Setting(0.0)
 
-    K0_max    = Setting(1000.0)
+    R0_max    = Setting(1000.0)
     eta_max = Setting(10.0)
     W2_max     = Setting(1.0)
+
+    alpha = 0.0
+    F1    = 0.0
+    F2    = 0.0
 
     def __init__(self):
         graphical_Options=ow_optical_element.GraphicalOptions(is_mirror=True)
@@ -165,16 +169,27 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
 
             getattr(self, "set_" + variable)()
 
-        K0_box = oasysgui.widgetBox(fit_box, "", addSpace=False, orientation="vertical")
+        R0_box = oasysgui.widgetBox(fit_box, "", addSpace=False, orientation="vertical")
         gui.separator(fit_box, 10)
         eta_box = oasysgui.widgetBox(fit_box, "", addSpace=False, orientation="vertical")
         gui.separator(fit_box, 10)
         W2_box = oasysgui.widgetBox(fit_box, "", addSpace=False, orientation="vertical")
         gui.separator(fit_box, 10)
 
-        add_parameter_box(K0_box, "K0", "K0 (1/R)")
+        add_parameter_box(R0_box, "R0",   "R0 [m]")
         add_parameter_box(eta_box, "eta", "\u03b7")
-        add_parameter_box(W2_box, "W2", "Width 2")
+        add_parameter_box(W2_box, "W2",   "W2 [mm]")
+
+        tab_fit_out = oasysgui.createTabPage(tabs, "Bender Out Parameters")
+
+        fit_out_box = oasysgui.widgetBox(tab_fit_out, "", addSpace=False, orientation="vertical")
+
+        le = oasysgui.lineEdit(fit_out_box, self, "alpha", "Momentum Asymmetry Factor (\u03b1)", labelWidth=250, valueType=float, orientation="horizontal")
+        le.setReadOnly(True)
+        le = oasysgui.lineEdit(fit_out_box, self, "F1", "Upstream Force", labelWidth=230, valueType=float, orientation="horizontal")
+        le.setReadOnly(True)
+        le = oasysgui.lineEdit(fit_out_box, self, "F2", "Downstream Force", labelWidth=230, valueType=float, orientation="horizontal")
+        le.setReadOnly(True)
 
         #######################################################
         
@@ -227,9 +242,9 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     def set_which_length(self):
         self.le_optimized_length.setEnabled(self.which_length==1)
     
-    def set_K0(self):
-        self.le_K0_min.setEnabled(self.K0_fixed==False)
-        self.le_K0_max.setEnabled(self.K0_fixed==False)
+    def set_R0(self):
+        self.le_R0_min.setEnabled(self.R0_fixed==False)
+        self.le_R0_max.setEnabled(self.R0_fixed==False)
 
     def set_eta(self):
         self.le_eta_min.setEnabled(self.eta_fixed==False)
@@ -293,7 +308,7 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
                         bender_data_to_plot.z_bender_correction, index=4, title="Ideal - Bender + Figure Error Surfaces")
 
         # Redo raytracing with the bender correction as error profile
-        super().completeOpeetans(shadow_oe)
+        super().completeOperations(shadow_oe)
 
         self.send("PreProcessor_Data", ShadowPreProcessorData(error_profile_data_file=self.output_file_name,
                                                               error_profile_x_dim=self.dim_x_plus+self.dim_x_minus,
