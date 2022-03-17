@@ -157,7 +157,7 @@ def __calculate_bender_correction(widget, y, z_shape):
                                              eta=parameters[1],
                                              alpha=alpha)
 
-    F1, F2 = __calculate_bender_forces(q, parameters[1], parameters[0]/widget.workspace_units_to_m, widget.E, L, widget.r)
+    F1, F2 = __calculate_bender_forces(q, parameters[1], parameters[0]/widget.workspace_units_to_m, widget.E, W1, L, widget.h, widget.r)
 
     parameters = numpy.append(parameters, round(alpha, 3))
     parameters = numpy.append(parameters, round(F1, 6))
@@ -165,11 +165,9 @@ def __calculate_bender_correction(widget, y, z_shape):
 
     ideal_profile  = __ideal_height_profile(y, p, q, grazing_angle)
 
-    lower_point = numpy.min(ideal_profile)
-
     # back to Shadow system
-    bender_profile += lower_point
-    ideal_profile  += lower_point
+    bender_profile -= numpy.min(bender_profile)
+    ideal_profile  -= numpy.min(ideal_profile)
 
     # from here it's Shadow Axis system
     correction_profile = ideal_profile - bender_profile
@@ -261,8 +259,9 @@ def __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha):
 # L = lenght of the mirror
 # r = distance between inner ond outer rods
 # ----------------------------------------------------------------
-def __calculate_bender_forces(q, eta, R0, E0, L, r):
-    M0 = E0/R0
+def __calculate_bender_forces(q, eta, R0, E, W1, L, h, r):
+    I0 = (W1*h**3)/12
+    M0 = E*I0/R0
     F1 = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
     F2 = (M0/r) * (1 + (eta*(L + 2*r)/(2*q)))
 
