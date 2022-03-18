@@ -81,8 +81,9 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
     widget.W2_out  = round(bender_parameter[2], 3)
 
     widget.alpha = bender_parameter[3]
-    widget.F1    = bender_parameter[4]
-    widget.F2    = bender_parameter[5]
+    widget.W0    = bender_parameter[4]
+    widget.F1    = bender_parameter[5]
+    widget.F2    = bender_parameter[6]
 
     if widget.modified_surface > 0:
         x_e, y_e, z_e = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name)
@@ -109,6 +110,33 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
     shadow_oe._oe.FILE_RIP = bytes(widget.output_file_name_full, 'utf-8')
 
     return shadow_oe, bender_data_to_plot
+
+def freeze_bender_configuration(widget):
+    widget.eta = widget.eta_out
+    widget.eta_fixed = True
+
+    widget.W2 = widget.W2_out
+    widget.W2_fixed = True
+
+    widget.W0_frozen = widget.W0 / widget.workspace_units_to_mm # to workspace units
+
+def set_q_from_forces(widget, F1, F2):
+    # 1 - F1*r/M0 = eta * (L + 2r) / 2*q1
+    # q1 =  eta * (L + 2r) / 2*(1 - F1*r/M0)
+
+    # F2*r/M0 - 1= eta * (L + 2r) / 2*q2
+    # q2 =  eta * (L + 2r) / 2*(F1*r/M0 - 1)
+
+    L  = widget.dim_y_plus + widget.dim_y_minus  # add optimization length
+
+    I0 = (widget.W0_frozen*widget.h**3)/12
+    M0 = widget.E*I0/widget.R0
+
+    q1 = widget.eta * (L + 2*widget.r) / (2*(1 - F1*widget.r/M0))
+    q2 = widget.eta * (L + 2*widget.r) / (2*(F2*widget.r/M0 - 1))
+
+    widget.image_side_focal_distance = (q1+q2)/2
+# -----------------------------------------------------------------
 
 def __calculate_bender_correction(widget, y, z_shape):
     W1 = widget.dim_x_plus + widget.dim_x_minus
@@ -150,16 +178,19 @@ def __calculate_bender_correction(widget, y, z_shape):
                                   method='trf')
         initial_guess = parameters
 
-    alpha = __calculate_taper_factor(W1, parameters[2] / widget.workspace_units_to_mm, L, p, q, grazing_angle)
+    R0  = parameters[0] / widget.workspace_units_to_m # here in workspace units
+    eta = parameters[1]
+    W2  = parameters[2] / widget.workspace_units_to_mm
 
-    bender_profile = __bender_height_profile(y, p, q, grazing_angle,
-                                             R0=parameters[0]/widget.workspace_units_to_m,  # here in workspace units
-                                             eta=parameters[1],
-                                             alpha=alpha)
+    alpha = __calculate_taper_factor(W1, W2, L, p, q, grazing_angle)
+    W0    = __calculate_W0(W1, alpha, L, p, q, grazing_angle) # W at the center
 
-    F1, F2 = __calculate_bender_forces(q, parameters[1], parameters[0]/widget.workspace_units_to_m, widget.E, W1, L, widget.h, widget.r)
+    bender_profile = __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha)
+
+    F1, F2 = __calculate_bender_forces(q, R0, eta, widget.E, W0, L, widget.h, widget.r)
 
     parameters = numpy.append(parameters, round(alpha, 3))
+    parameters = numpy.append(parameters, round(W0 * widget.workspace_units_to_mm, 4))
     parameters = numpy.append(parameters, round(F1, 6))
     parameters = numpy.append(parameters, round(F2, 6))
 
@@ -204,8 +235,7 @@ def __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu):
     return sv
 
 def __calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
-    f = p * q / (p + q)
-    fprime = f / numpy.cos(grazing_angle)
+    fprime = __focal_distance(p, q) / numpy.cos(grazing_angle)
 
     # W2 = W1(1 - alpha L/f')
     # W2/W1 - 1 = - alpha  L/f'
@@ -214,6 +244,13 @@ def __calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
     alpha = (1 - W2/W1) * (fprime / L)
 
     return alpha
+
+def __calculate_W0(W1, alpha, L, p, q, grazing_angle):
+    fprime = __focal_distance(p, q) / numpy.cos(grazing_angle)
+
+    W0 =  W1*(1 - alpha *L/(2*fprime))
+
+    return W0
 
 def __calculate_bender_slope_variation(y, fprime, K0, eta, alpha):
     sv = -(K0*fprime/alpha**2)*(eta * alpha * (y / fprime) + (eta + alpha) * numpy.log(1 - (alpha * y / fprime)))
@@ -259,8 +296,8 @@ def __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha):
 # L = lenght of the mirror
 # r = distance between inner ond outer rods
 # ----------------------------------------------------------------
-def __calculate_bender_forces(q, eta, R0, E, W1, L, h, r):
-    I0 = (W1*h**3)/12
+def __calculate_bender_forces(q, R0, eta, E, W0, L, h, r):
+    I0 = (W0*h**3)/12
     M0 = E*I0/R0
     F1 = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
     F2 = (M0/r) * (1 + (eta*(L + 2*r)/(2*q)))

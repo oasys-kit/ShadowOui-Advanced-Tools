@@ -104,8 +104,11 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     W2_max     = Setting(1.0)
 
     alpha = 0.0
+    W0    = 0.0
     F1    = 0.0
     F2    = 0.0
+
+    W0_frozen = Setting(0.0)
 
     def __init__(self):
         graphical_Options=ow_optical_element.GraphicalOptions(is_mirror=True)
@@ -187,6 +190,8 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         fit_out_box = oasysgui.widgetBox(tab_fit_out, "", addSpace=False, orientation="vertical")
 
         le = oasysgui.lineEdit(fit_out_box, self, "alpha", "Momentum Asymmetry Factor (\u03b1)", labelWidth=250, valueType=float, orientation="horizontal")
+        le.setReadOnly(True)
+        le = oasysgui.lineEdit(fit_out_box, self, "W0", "Width at center [mm]", labelWidth=230, valueType=float, orientation="horizontal")
         le.setReadOnly(True)
         le = oasysgui.lineEdit(fit_out_box, self, "F1", "Upstream Force", labelWidth=230, valueType=float, orientation="horizontal")
         le.setReadOnly(True)
