@@ -176,16 +176,21 @@ def __generate_initial_beam(widget):
 def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_calculations):
     if widget.use_harmonic == 2:
         energy_points = int(widget.energy_points)
+
         x_array = numpy.full(energy_points, None)
         z_array = numpy.full(energy_points, None)
+
         intensity_source_dimension_array = numpy.full(energy_points, None)
+
         x_first_array = numpy.full(energy_points, None)
         z_first_array = numpy.full(energy_points, None)
+
         intensity_angular_distribution_array = numpy.full(energy_points, None)
         integrated_flux_array = numpy.zeros(energy_points)
         nr_rays_array = numpy.zeros(energy_points)
         energies = numpy.linspace(widget.energy, widget.energy_to, energy_points)
         prog_bars = numpy.linspace(20, 50, energy_points)
+
         total_power = None
 
         delta_e = energies[1] - energies[0]

@@ -85,7 +85,7 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
     widget.F1    = bender_parameter[5]
     widget.F2    = bender_parameter[6]
 
-    if widget.modified_surface > 0:
+    if widget.modified_surface == 1 and widget.ms_type_of_defect == 2:
         x_e, y_e, z_e = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name)
 
         if len(x) == len(x_e) and len(y) == len(y_e) and \
@@ -182,12 +182,12 @@ def __calculate_bender_correction(widget, y, z_shape):
     eta = parameters[1]
     W2  = parameters[2] / widget.workspace_units_to_mm
 
-    alpha = __calculate_taper_factor(W1, W2, L, p, q, grazing_angle)
-    W0    = __calculate_W0(W1, alpha, L, p, q, grazing_angle) # W at the center
+    alpha = calculate_taper_factor(W1, W2, L, p, q, grazing_angle)
+    W0    = calculate_W0(W1, alpha, L, p, q, grazing_angle) # W at the center
 
     bender_profile = __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha)
 
-    F1, F2 = __calculate_bender_forces(q, R0, eta, widget.E, W0, L, widget.h, widget.r)
+    F1, F2 = calculate_bender_forces(q, R0, eta, widget.E, W0, L, widget.h, widget.r)
 
     parameters = numpy.append(parameters, round(alpha, 3))
     parameters = numpy.append(parameters, round(W0 * widget.workspace_units_to_mm, 4))
@@ -234,7 +234,7 @@ def __calculate_ideal_slope_variation(y, fprime, K0id, mu, nu):
     sv = 2*fprime*K0id*((2 * nu * (y / fprime) + mu) / numpy.sqrt(1 - mu * (y / fprime) - nu * (y / fprime) ** 2) - mu)
     return sv
 
-def __calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
+def calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
     fprime = __focal_distance(p, q) / numpy.cos(grazing_angle)
 
     # W2 = W1(1 - alpha L/f')
@@ -245,7 +245,7 @@ def __calculate_taper_factor(W1, W2, L, p, q, grazing_angle):
 
     return alpha
 
-def __calculate_W0(W1, alpha, L, p, q, grazing_angle):
+def calculate_W0(W1, alpha, L, p, q, grazing_angle):
     fprime = __focal_distance(p, q) / numpy.cos(grazing_angle)
 
     W0 =  W1*(1 - alpha *L/(2*fprime))
@@ -277,7 +277,7 @@ def __ideal_height_profile(y, p, q, grazing_angle):
 def __bender_slope_profile(y, p, q, grazing_angle, W1, L, R0, eta, W2):
     fprime = __focal_distance(p, q) / numpy.cos(grazing_angle)
 
-    return __calculate_bender_slope_variation(y, fprime, 1 / R0, eta, alpha=__calculate_taper_factor(W1, W2, L, p, q, grazing_angle))
+    return __calculate_bender_slope_variation(y, fprime, 1 / R0, eta, alpha=calculate_taper_factor(W1, W2, L, p, q, grazing_angle))
 
 def __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha):
     fprime = __focal_distance(p, q)/numpy.cos(grazing_angle)
@@ -296,7 +296,7 @@ def __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha):
 # L = lenght of the mirror
 # r = distance between inner ond outer rods
 # ----------------------------------------------------------------
-def __calculate_bender_forces(q, R0, eta, E, W0, L, h, r):
+def calculate_bender_forces(q, R0, eta, E, W0, L, h, r):
     I0 = (W0*h**3)/12
     M0 = E*I0/R0
     F1 = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
