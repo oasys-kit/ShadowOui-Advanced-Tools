@@ -108,8 +108,6 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     F1    = 0.0
     F2    = 0.0
 
-    W0_frozen = Setting(0.0)
-
     def __init__(self):
         graphical_Options=ow_optical_element.GraphicalOptions(is_mirror=True)
 

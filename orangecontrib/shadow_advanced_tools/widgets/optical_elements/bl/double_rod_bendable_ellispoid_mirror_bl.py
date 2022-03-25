@@ -118,8 +118,6 @@ def freeze_bender_configuration(widget):
     widget.W2 = widget.W2_out
     widget.W2_fixed = True
 
-    widget.W0_frozen = widget.W0 / widget.workspace_units_to_mm # to workspace units
-
 def set_q_from_forces(widget, F1, F2):
     # 1 - F1*r/M0 = eta * (L + 2r) / 2*q1
     # q1 =  eta * (L + 2r) / 2*(1 - F1*r/M0)
@@ -127,15 +125,16 @@ def set_q_from_forces(widget, F1, F2):
     # F2*r/M0 - 1= eta * (L + 2r) / 2*q2
     # q2 =  eta * (L + 2r) / 2*(F1*r/M0 - 1)
 
-    L  = widget.dim_y_plus + widget.dim_y_minus  # add optimization length
+    L  = widget.dim_y_plus + widget.dim_y_minus
+    W0 = widget.W0 / widget.workspace_units_to_mm
 
-    I0 = (widget.W0_frozen*widget.h**3)/12
-    M0 = widget.E*I0/widget.R0
+    I0 = (W0 * widget.h**3) / 12
+    M0 = widget.E * I0 / (widget.R0 * widget.workspace_units_to_mm / widget.workspace_units_to_m)
 
     q1 = widget.eta * (L + 2*widget.r) / (2*(1 - F1*widget.r/M0))
     q2 = widget.eta * (L + 2*widget.r) / (2*(F2*widget.r/M0 - 1))
 
-    widget.image_side_focal_distance = (q1+q2)/2
+    widget.image_side_focal_distance = (q1 + q2) / 2
 # -----------------------------------------------------------------
 
 def __calculate_bender_correction(widget, y, z_shape):
