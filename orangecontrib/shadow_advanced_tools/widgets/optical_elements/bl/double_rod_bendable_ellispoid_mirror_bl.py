@@ -82,8 +82,8 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
 
     widget.alpha = bender_parameter[3]
     widget.W0    = bender_parameter[4]
-    widget.F1    = bender_parameter[5]
-    widget.F2    = bender_parameter[6]
+    widget.F_upstream    = bender_parameter[5]
+    widget.F_downstream    = bender_parameter[6]
 
     if widget.modified_surface == 1 and widget.ms_type_of_defect == 2:
         x_e, y_e, z_e = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name)
@@ -118,12 +118,15 @@ def freeze_bender_configuration(widget):
     widget.W2 = widget.W2_out
     widget.W2_fixed = True
 
-def set_q_from_forces(widget, F1, F2):
-    # 1 - F1*r/M0 = eta * (L + 2r) / 2*q1
-    # q1 =  eta * (L + 2r) / 2*(1 - F1*r/M0)
+def set_q_from_forces(widget, F_upstream, F_downstream):
+    # F_upstream   = M0/r [1 - eta * (L + 2r) / 2*q]
+    # F_downstream = M0/r [1 + eta * (L + 2r) / 2*q]
 
-    # F2*r/M0 - 1= eta * (L + 2r) / 2*q2
-    # q2 =  eta * (L + 2r) / 2*(F1*r/M0 - 1)
+    # 1 - F_upstream*r/M0 = eta * (L + 2r) / 2*q
+    # q =  eta * (L + 2r) / 2*(1 - F_upstream*r/M0)
+
+    # F_downstream*r/M0 - 1= eta * (L + 2r) / 2*q
+    # q =  eta * (L + 2r) / 2*(F_upstream*r/M0 - 1)
 
     L  = widget.dim_y_plus + widget.dim_y_minus
     W0 = widget.W0 / widget.workspace_units_to_mm
@@ -131,10 +134,12 @@ def set_q_from_forces(widget, F1, F2):
     I0 = (W0 * widget.h**3) / 12
     M0 = widget.E * I0 / (widget.R0 * widget.workspace_units_to_mm / widget.workspace_units_to_m)
 
-    q1 = widget.eta * (L + 2*widget.r) / (2*(1 - F1*widget.r/M0))
-    q2 = widget.eta * (L + 2*widget.r) / (2*(F2*widget.r/M0 - 1))
+    q1 = widget.eta * (L + 2*widget.r) / (2*(1 - F_upstream*widget.r/M0))
+    q2 = widget.eta * (L + 2*widget.r) / (2*(F_downstream*widget.r/M0 - 1))
 
+    # taking the average as unique q -> the calculation will recalculate the actual forces
     widget.image_side_focal_distance = (q1 + q2) / 2
+
 # -----------------------------------------------------------------
 
 def __calculate_bender_correction(widget, y, z_shape):
@@ -186,12 +191,12 @@ def __calculate_bender_correction(widget, y, z_shape):
 
     bender_profile = __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha)
 
-    F1, F2 = calculate_bender_forces(q, R0, eta, widget.E, W0, L, widget.h, widget.r)
+    F_upstream, F_downstream = calculate_bender_forces(q, R0, eta, widget.E, W0, L, widget.h, widget.r)
 
     parameters = numpy.append(parameters, round(alpha, 3))
     parameters = numpy.append(parameters, round(W0 * widget.workspace_units_to_mm, 4))
-    parameters = numpy.append(parameters, round(F1, 6))
-    parameters = numpy.append(parameters, round(F2, 6))
+    parameters = numpy.append(parameters, round(F_upstream, 6))
+    parameters = numpy.append(parameters, round(F_downstream, 6))
 
     ideal_profile  = __ideal_height_profile(y, p, q, grazing_angle)
 
@@ -298,7 +303,7 @@ def __bender_height_profile(y, p, q, grazing_angle, R0, eta, alpha):
 def calculate_bender_forces(q, R0, eta, E, W0, L, h, r):
     I0 = (W0*h**3)/12
     M0 = E*I0/R0
-    F1 = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
-    F2 = (M0/r) * (1 + (eta*(L + 2*r)/(2*q)))
+    F_upstream = (M0/r) * (1 - (eta*(L + 2*r)/(2*q)))
+    F_downstream = (M0/r) * (1 + (eta*(L + 2*r)/(2*q)))
 
-    return F1, F2
+    return F_upstream, F_downstream
