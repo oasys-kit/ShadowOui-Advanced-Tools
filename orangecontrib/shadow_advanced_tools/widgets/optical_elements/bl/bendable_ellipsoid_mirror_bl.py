@@ -75,7 +75,7 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
 
     x, y, z = __calculate_ideal_surface(widget, shadow_oe_temp)
 
-    bender_parameter, z_bender_correction, bender_data_to_plot = __calculate_bender_correction(widget, y, z)
+    bender_parameter, bender_data_to_plot = __calculate_bender_correction(widget, y, z)
 
     bender_data_to_plot.x = x
 
@@ -96,14 +96,12 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
         else:
             z_figure_error = interp2d(y_e, x_e, z_e, kind='cubic')(y, x)
 
-        z_bender_correction += z_figure_error
-
-        bender_data_to_plot.z_figure_error=z_figure_error
-        bender_data_to_plot.z_bender_correction=z_bender_correction
+        bender_data_to_plot.z_figure_error      = z_figure_error
+        bender_data_to_plot.z_bender_correction = bender_data_to_plot.z_bender_correction_no_figure_error + z_figure_error
     else:
-        bender_data_to_plot.z_bender_correction = z_bender_correction
+        bender_data_to_plot.z_bender_correction = bender_data_to_plot.z_bender_correction_no_figure_error
 
-    ST.write_shadow_surface(z_bender_correction.T, numpy.round(x, 6), numpy.round(y, 6), widget.output_file_name_full)
+    ST.write_shadow_surface(bender_data_to_plot.z_bender_correction.T, numpy.round(x, 6), numpy.round(y, 6), widget.output_file_name_full)
 
     # Add new surface as figure error
     shadow_oe._oe.F_RIPPLE = 1
@@ -264,11 +262,11 @@ def __calculate_bender_correction(widget, y, z):
 
     for i in range(z_bender_correction.shape[0]): z_bender_correction[i, :] = numpy.copy(correction_profile)
 
-    return parameters, z_bender_correction, BenderDataToPlot(y=y,
-                                                             ideal_profile=ideal_profile,
-                                                             bender_profile=bender_profile,
-                                                             correction_profile=correction_profile,
-                                                             titles=["Bender vs. Ideal Profiles" + "\n" + r'$R^2$ = ' + str(r_squared),
-                                                                     "Correction Profile 1D, r.m.s. = " + str(rms) + " nm" + ("" if widget.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)"))],
-                                                             z_bender_correction_no_figure_error=z_bender_correction)
+    return parameters, BenderDataToPlot(y=y,
+                                        ideal_profile=ideal_profile,
+                                        bender_profile=bender_profile,
+                                        correction_profile=correction_profile,
+                                        titles=["Bender vs. Ideal Profiles" + "\n" + r'$R^2$ = ' + str(r_squared),
+                                                "Correction Profile 1D, r.m.s. = " + str(rms) + " nm" + ("" if widget.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)"))],
+                                        z_bender_correction_no_figure_error=z_bender_correction)
 

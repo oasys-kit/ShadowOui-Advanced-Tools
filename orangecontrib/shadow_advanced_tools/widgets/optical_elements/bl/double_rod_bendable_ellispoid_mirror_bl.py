@@ -72,7 +72,7 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
     x = numpy.linspace(-widget.dim_x_minus, widget.dim_x_plus, widget.bender_bin_x + 1)
     y = numpy.linspace(-widget.dim_y_minus, widget.dim_y_plus, widget.bender_bin_y + 1)
 
-    bender_parameter, z_bender_correction, bender_data_to_plot = __calculate_bender_correction(widget, y, (len(x), len(y)))
+    bender_parameter, bender_data_to_plot = __calculate_bender_correction(widget, y, (len(x), len(y)))
 
     bender_data_to_plot.x = x
 
@@ -95,14 +95,12 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
         else:
             z_figure_error = interp2d(y_e, x_e, z_e, kind='cubic')(y, x)
 
-        z_bender_correction += z_figure_error
-
-        bender_data_to_plot.z_figure_error=z_figure_error
-        bender_data_to_plot.z_bender_correction=z_bender_correction
+        bender_data_to_plot.z_figure_error      = z_figure_error
+        bender_data_to_plot.z_bender_correction = bender_data_to_plot.z_bender_correction_no_figure_error + z_figure_error
     else:
-        bender_data_to_plot.z_bender_correction = z_bender_correction
+        bender_data_to_plot.z_bender_correction = bender_data_to_plot.z_bender_correction_no_figure_error
 
-    ST.write_shadow_surface(z_bender_correction.T, numpy.round(x, 6), numpy.round(y, 6), widget.output_file_name_full)
+    ST.write_shadow_surface(bender_data_to_plot.z_bender_correction.T, numpy.round(x, 6), numpy.round(y, 6), widget.output_file_name_full)
 
     # Add new surface as figure error
     shadow_oe._oe.F_RIPPLE = 1
@@ -210,20 +208,20 @@ def __calculate_bender_correction(widget, y, z_shape):
 
     # r-squared = 1 - residual sum of squares / total sum of squares
     r_squared = 1 - (numpy.sum(correction_profile ** 2) / numpy.sum((ideal_profile - numpy.mean(ideal_profile)) ** 2))
-    rms = round(correction_profile.std() * 1e9 * widget.workspace_units_to_m, 6)
+    rms       = round(correction_profile.std() * 1e9 * widget.workspace_units_to_m, 6)
     if widget.which_length == 1: rms_opt = round(correction_profile_fit.std() * 1e9 * widget.workspace_units_to_m, 6)
 
     z_bender_correction = numpy.zeros(z_shape)
 
     for i in range(z_bender_correction.shape[0]): z_bender_correction[i, :] = numpy.copy(correction_profile)
 
-    return parameters, z_bender_correction, BenderDataToPlot(y=y,
-                                                             ideal_profile=ideal_profile,
-                                                             bender_profile=bender_profile,
-                                                             correction_profile=correction_profile,
-                                                             titles=["Bender vs. Ideal Profiles" + "\n" + r'$R^2$ = ' + str(r_squared),
-                                                                     "Correction Profile 1D, r.m.s. = " + str(rms) + " nm" + ("" if widget.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)"))],
-                                                             z_bender_correction_no_figure_error=z_bender_correction)
+    return parameters, BenderDataToPlot(y=y,
+                                        ideal_profile=ideal_profile,
+                                        bender_profile=bender_profile,
+                                        correction_profile=correction_profile,
+                                        titles=["Bender vs. Ideal Profiles" + "\n" + r'$R^2$ = ' + str(r_squared),
+                                                "Correction Profile 1D, r.m.s. = " + str(rms) + " nm" + ("" if widget.which_length == 0 else (", " + str(rms_opt) + " nm (optimized)"))],
+                                        z_bender_correction_no_figure_error=z_bender_correction)
 
 def __focal_distance(p, q):
     return p*q/(p+q)
