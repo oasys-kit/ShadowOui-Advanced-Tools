@@ -168,6 +168,8 @@ class HybridUndulatorAttributes():
     auto_energy = Setting(0.0)
     auto_harmonic_number = Setting(1)
 
+    use_stokes = Setting(1)
+
     energy_step = None
     power_step = None
     current_step = None

@@ -90,7 +90,6 @@ class Distribution:
     DIVERGENCE = 1
 
 class HybridUndulator(GenericElement, HybridUndulatorAttributes):
-
     TABS_AREA_HEIGHT = 620
 
     name = "Shadow/SRW Undulator"
@@ -269,6 +268,15 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
 
         tab_ls = oasysgui.createTabPage(tabs_srw, "Undulator Setting")
         tab_wf = oasysgui.createTabPage(tabs_srw, "Wavefront Setting")
+        tab_fl = oasysgui.createTabPage(tabs_srw, "Advanced Setting")
+
+        ####################################
+
+        box = oasysgui.widgetBox(tab_fl, "Flux Calculation", addSpace=False, orientation="vertical")
+
+        gui.comboBox(box, self, "use_stokes", label="Integrated Flux", labelWidth=300,
+                     items=["From Wavefront", "From Stokes"],
+                     sendSelectedValue=False, orientation="horizontal")
 
         ####################################
 

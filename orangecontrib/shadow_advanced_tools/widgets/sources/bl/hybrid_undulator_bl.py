@@ -389,30 +389,42 @@ def __create_undulator(widget, no_shift=False):
         Bx = widget.Bh
 
     symmetry_vs_longitudinal_position_horizontal = 1 if widget.symmetry_vs_longitudinal_position_horizontal == 0 else -1
-    symmetry_vs_longitudinal_position_vertical = 1 if widget.symmetry_vs_longitudinal_position_vertical == 0 else -1
+    symmetry_vs_longitudinal_position_vertical   = 1 if widget.symmetry_vs_longitudinal_position_vertical == 0 else -1
 
-    und = SRWLMagFldU([SRWLMagFldH(1, 'h',
-                                   _B=Bx,
-                                   _ph=widget.initial_phase_horizontal,
-                                   _s=symmetry_vs_longitudinal_position_horizontal,
-                                   _a=1.0),
-                       SRWLMagFldH(1, 'v',
-                                   _B=By,
-                                   _ph=widget.initial_phase_vertical,
-                                   _s=symmetry_vs_longitudinal_position_vertical,
-                                   _a=1)],
-                      widget.undulator_period, widget.number_of_periods)  # Planar Undulator
+    if Bx == 0.0:
+        und = SRWLMagFldU(_arHarm=[SRWLMagFldH(_n=1,
+                                               _h_or_v='v',
+                                               _B=By,
+                                               _ph=widget.initial_phase_vertical,
+                                               _a=1)],
+                          _per=widget.undulator_period,
+                          _nPer=widget.number_of_periods)  # Planar Undulator
+    else:
+        und = SRWLMagFldU(_arHarm=[SRWLMagFldH(_n=1,
+                                               _h_or_v='h',
+                                               _B=Bx,
+                                               _ph=widget.initial_phase_horizontal,
+                                               _s=symmetry_vs_longitudinal_position_horizontal,
+                                               _a=1),
+                                   SRWLMagFldH(_n=1,
+                                               _h_or_v='v',
+                                               _B=By,
+                                               _ph=widget.initial_phase_vertical,
+                                               _s=symmetry_vs_longitudinal_position_vertical,
+                                               _a=1)],
+                          _per=widget.undulator_period,
+                          _nPer=widget.number_of_periods)  # Planar Undulator
 
     if no_shift:
         magFldCnt = SRWLMagFldC(_arMagFld=[und],
-                                _arXc = array('d', [0.0]),
-                                _arYc = array('d', [0.0]),
-                                _arZc = array('d', [0.0]))  # Container of all Field Elements
+                                _arXc = srw_array('d', [0.0]),
+                                _arYc = srw_array('d', [0.0]),
+                                _arZc = srw_array('d', [0.0]))  # Container of all Field Elements
     else:
         magFldCnt = SRWLMagFldC(_arMagFld=[und],
-                                _arXc = array('d', [widget.horizontal_central_position]),
-                                _arYc = array('d', [widget.vertical_central_position]),
-                                _arZc = array('d', [widget.longitudinal_central_position])  )  # Container of all Field Elements
+                                _arXc = srw_array('d', [widget.horizontal_central_position]),
+                                _arYc = srw_array('d', [widget.vertical_central_position]),
+                                _arZc = srw_array('d', [widget.longitudinal_central_position])  )  # Container of all Field Elements
 
     return magFldCnt
 
@@ -535,7 +547,7 @@ def __calculate_automatic_waste_position(widget, energy, do_plot=True):
         srwl.CalcElecFieldSR(wfr, 0, magFldCnt, arPrecParSpec)
         srwl.PropagElecField(wfr, optBLSouDim)
 
-        arI = array('f', [0] * wfr.mesh.nx * wfr.mesh.ny)  # "flat" 2D array to take intensity data
+        arI = srw_array('f', [0] * wfr.mesh.nx * wfr.mesh.ny)  # "flat" 2D array to take intensity data
         srwl.CalcIntFromElecField(arI, wfr, 6, 0, 3, wfr.mesh.eStart, 0, 0) # SINGLE ELECTRON!
 
         x, y, intensity_distribution = __transform_srw_array(arI, wfr.mesh)
@@ -725,12 +737,36 @@ def __run_SRW_calculation(widget, energy, do_cumulated_calculations=False):
     dx = (x[1] - x[0]) * 1e3  # mm for power computations
     dy = (z[1] - z[0]) * 1e3
 
-    integrated_flux = intensity_angular_distribution.sum( ) *dx *dy
+    def get_integrated_flux_from_stokes():
+        h_max = int(2.5*wfr.mesh.eStart/resonance_energy(widget, harmonic=1))
 
-    if widget.compute_power:
-        total_power = widget.power_step if widget.power_step > 0 else integrated_flux * (1e3 * widget.energy_step * codata.e)
-    else:
-        total_power = None
+        arPrecF = [0] * 5  # for spectral flux vs photon energy
+        arPrecF[0] = 1  # initial UR harmonic to take into account
+        arPrecF[1] = h_max  # final UR harmonic to take into account
+        arPrecF[2] = 1.5  # longitudinal integration precision parameter
+        arPrecF[3] = 1.5  # azimuthal integration precision parameter
+        arPrecF[4] = 1  # calculate flux (1) or flux per unit surface (2)
+
+        stkF = SRWLStokes()  # for spectral flux vs photon energy
+        # srio stkF.allocate(10000, 1, 1) #numbers of points vs photon energy, horizontal and vertical positions
+        stkF.allocate(1, 1, 1)  # numbers of points vs photon energy, horizontal and vertical positions
+        stkF.mesh.zStart = wfr.mesh.zStart  # longitudinal position [m] at which UR has to be calculated
+        stkF.mesh.eStart = wfr.mesh.eStart  # initial photon energy [eV]
+        stkF.mesh.eFin = wfr.mesh.eStart # final photon energy [eV]
+        stkF.mesh.xStart = wfr.mesh.xStart  # initial horizontal position [m]
+        stkF.mesh.xFin = wfr.mesh.xFin  # final horizontal position [m]
+        stkF.mesh.yStart = wfr.mesh.yStart  # initial vertical position [m]
+        stkF.mesh.yFin = wfr.mesh.yFin  # final vertical position [m]
+
+        srwl.CalcStokesUR(stkF, elecBeam, magFldCnt.arMagFld[0], arPrecF)
+
+        return stkF.arS[0]
+
+    if widget.use_stokes == 0: integrated_flux = intensity_angular_distribution.sum()*dx*dy # this is single electron -> no emittance
+    else:                      integrated_flux = get_integrated_flux_from_stokes()          # recompute the flux with the whole beam (no single electron)
+
+    if widget.compute_power: total_power = widget.power_step if widget.power_step > 0 else integrated_flux * (1e3 * widget.energy_step * codata.e)
+    else:                    total_power = None
 
     if widget.compute_power and do_cumulated_calculations:
         current_energy          = numpy.ones(1) * energy
