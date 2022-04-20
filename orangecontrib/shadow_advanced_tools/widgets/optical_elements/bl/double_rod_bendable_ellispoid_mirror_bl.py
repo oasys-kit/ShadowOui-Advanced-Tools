@@ -109,35 +109,6 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
 
     return shadow_oe, bender_data_to_plot
 
-def freeze_bender_configuration(widget):
-    widget.eta = widget.eta_out
-    widget.eta_fixed = True
-
-    widget.W2 = widget.W2_out
-    widget.W2_fixed = True
-
-def set_q_from_forces(widget, F_upstream, F_downstream):
-    # F_upstream   = M0/r [1 - eta * (L + 2r) / 2*q]
-    # F_downstream = M0/r [1 + eta * (L + 2r) / 2*q]
-
-    # 1 - F_upstream*r/M0 = eta * (L + 2r) / 2*q
-    # q =  eta * (L + 2r) / 2*(1 - F_upstream*r/M0)
-
-    # F_downstream*r/M0 - 1= eta * (L + 2r) / 2*q
-    # q =  eta * (L + 2r) / 2*(F_upstream*r/M0 - 1)
-
-    L  = widget.dim_y_plus + widget.dim_y_minus
-    W0 = widget.W0 / widget.workspace_units_to_mm
-
-    I0 = (W0 * widget.h**3) / 12
-    M0 = widget.E * I0 / (widget.R0 * widget.workspace_units_to_mm / widget.workspace_units_to_m)
-
-    q1 = widget.eta * (L + 2*widget.r) / (2*(1 - F_upstream*widget.r/M0))
-    q2 = widget.eta * (L + 2*widget.r) / (2*(F_downstream*widget.r/M0 - 1))
-
-    # taking the average as unique q -> the calculation will recalculate the actual forces
-    widget.image_side_focal_distance = (q1 + q2) / 2
-
 # -----------------------------------------------------------------
 
 def __calculate_bender_correction(widget, y, z_shape):
