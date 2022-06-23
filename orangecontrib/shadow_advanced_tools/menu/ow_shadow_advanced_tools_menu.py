@@ -118,7 +118,7 @@ class ShadowAdvancedToolsMenu(OMenu):
             for node in self.canvas_main_window.current_document().scheme().nodes:
                 widget = self.canvas_main_window.current_document().scheme().widget_for_node(node)
 
-                if isinstance(widget, PowerPlotXY): widget.clearResults(interactive=False)
+                if isinstance(widget, PowerPlotXY): widget.clear_results(interactive=False)
         except Exception as exception:
             QtWidgets.QMessageBox.critical(None, "Error",
                 exception.args[0],

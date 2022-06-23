@@ -266,6 +266,9 @@ class PowerPlotXYWidget(QWidget):
 
         ticket['histogram'][numpy.where(ticket['histogram'] < 1e-7)] = 0.0
 
+        ticket['h_label'] = var_x
+        ticket['v_label'] = var_y
+
         self.cumulated_previous_power_plot = total_incident_power_shadow
         self.cumulated_power_plot = total_final_power_shadow
 
