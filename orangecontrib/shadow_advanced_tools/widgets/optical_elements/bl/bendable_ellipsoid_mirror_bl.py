@@ -53,7 +53,7 @@ from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
 from Shadow import ShadowTools as ST
 
-from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.bender_data_to_plot import BenderDataToPlot
+from oasys.widgets.abstract.benders.bender_data_to_plot import BenderDataToPlot
 
 TRAPEZIUM = 0
 RECTANGLE = 1
