@@ -54,18 +54,7 @@ from Shadow import ShadowTools as ST
 
 from oasys.widgets.abstract.benders.double_rod_bendable_ellispoid_mirror import DoubleRodBenderParameters, calculate_bender_correction
 
-def apply_bender_surface(widget, input_beam, shadow_oe):
-    shadow_oe_temp  = shadow_oe.duplicate()
-    input_beam_temp = input_beam.duplicate(history=False)
-
-    widget.manage_acceptance_slits(shadow_oe_temp)
-
-    ShadowBeam.traceFromOE(input_beam_temp,
-                           shadow_oe_temp,
-                           write_start_file=0,
-                           write_end_file=0,
-                           widget_class_name=type(widget).__name__)
-
+def apply_bender_surface(widget, shadow_oe):
     x = numpy.linspace(-widget.dim_x_minus, widget.dim_x_plus, widget.bender_bin_x + 1)
     y = numpy.linspace(-widget.dim_y_minus, widget.dim_y_plus, widget.bender_bin_y + 1)
 
@@ -117,6 +106,6 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
     shadow_oe._oe.F_G_S = 2
     shadow_oe._oe.FILE_RIP = bytes(widget.output_file_name_full, 'utf-8')
 
-    return shadow_oe, bender_data_to_plot
+    return bender_data_to_plot
 
 

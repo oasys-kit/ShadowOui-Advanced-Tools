@@ -291,10 +291,7 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         self.output_file_name_full = congruence.checkFileName(self.output_file_name)
 
     def completeOperations(self, shadow_oe):
-        shadow_oe, bender_data_to_plot = apply_bender_surface(widget=self,
-                                                              shadow_oe=shadow_oe,
-                                                              input_beam=self.input_beam)
-
+        bender_data_to_plot = apply_bender_surface(widget=self, shadow_oe=shadow_oe)
 
         self.plot1D(bender_data_to_plot.y, bender_data_to_plot.bender_profile, y_values_2=bender_data_to_plot.ideal_profile,
                     index=0, title=bender_data_to_plot.titles[0], um=1)
