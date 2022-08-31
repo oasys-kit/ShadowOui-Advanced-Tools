@@ -74,8 +74,9 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     bender_bin_y = Setting(500)
 
     E = Setting(131000)
-    h = Setting(10)
-    r = Setting(15)
+    h = Setting(10.0)
+    l = Setting(70.0)
+    r = Setting(12.0)
 
     output_file_name = Setting("mirror_bender.dat")
 
@@ -126,6 +127,7 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
 
         self.le_E = oasysgui.lineEdit(material_box, self, "E", "Young's Modulus ", labelWidth=260, valueType=float, orientation="horizontal")
         self.le_h = oasysgui.lineEdit(material_box, self, "h", "Thickness ", labelWidth=260, valueType=float, orientation="horizontal")
+        self.le_l = oasysgui.lineEdit(material_box, self, "l", "Inner Rods distance ", labelWidth=260, valueType=float, orientation="horizontal")
         self.le_r = oasysgui.lineEdit(material_box, self, "r", "Inner/Outer Rods distance ", labelWidth=260, valueType=float, orientation="horizontal")
 
         tab_fit = oasysgui.createTabPage(tabs, "Fit Setting")
@@ -267,6 +269,8 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         label = self.le_h.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
         label = self.le_r.parent().layout().itemAt(0).widget()
+        label.setText(label.text() + " [" + self.workspace_units_label + "]")
+        label = self.le_l.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")
         label = self.cb_optimized_length.parent().layout().itemAt(0).widget()
         label.setText(label.text() + " [" + self.workspace_units_label + "]")

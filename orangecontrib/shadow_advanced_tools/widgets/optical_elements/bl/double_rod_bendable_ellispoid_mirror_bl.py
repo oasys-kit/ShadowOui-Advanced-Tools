@@ -70,6 +70,7 @@ def apply_bender_surface(widget, shadow_oe):
     input_parameters.E                     = widget.E
     input_parameters.h                     = widget.h
     input_parameters.r                     = widget.r
+    input_parameters.l                     = widget.l
     input_parameters.R0                    = widget.R0
     input_parameters.R0_max                = widget.R0_max
     input_parameters.R0_min                = widget.R0_min
