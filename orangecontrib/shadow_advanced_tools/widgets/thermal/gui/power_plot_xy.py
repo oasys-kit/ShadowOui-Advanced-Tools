@@ -856,7 +856,7 @@ class AbstractPowerPlotXY(AutomaticElement):
     # SAVE
 
     def save_cumulated_data(self):
-        file_name = oasysgui.selectSaveFileFromDialog(self, "Save Current Plot", default_file_name=("" if self.autosave==0 else self.autosave_file_name),
+        file_name = oasysgui.selectSaveFileFromDialog(self, "Save Current Plot", default_file_name=("" if (not hasattr(self, "autosave") or self.autosave==0) else self.autosave_file_name),
                                                       file_extension_filter="HDF5 Files (*.hdf5 *.h5 *.hdf);;Text Files (*.dat *.txt);;Ansys Files (*.csv)")
 
         if not file_name is None and not file_name.strip()=="":
