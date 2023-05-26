@@ -214,7 +214,7 @@ class PowerPlotXYWidget(QWidget):
 
         good = numpy.where(ticket_initial["histogram"] > 0)
 
-        efficiency_incident = numpy.zeros(len(ticket_incident["histogram"]))
+        efficiency_incident        = numpy.zeros(len(ticket_incident["histogram"]))
         efficiency_incident[good]  = ticket_incident["histogram"][good] / ticket_initial["histogram"][good]
 
         incident_power_shadow = initial_power_shadow * efficiency_incident
@@ -235,7 +235,7 @@ class PowerPlotXYWidget(QWidget):
         ticket = beam.histo1(11, xrange=energy_range, nbins=nbins_interpolation, nolost=1, ref=0) # number of rays per bin
         good = numpy.where(ticket["histogram"] > 0)
 
-        final_power_per_ray = numpy.zeros(len(final_power_shadow))
+        final_power_per_ray       = numpy.zeros(len(final_power_shadow))
         final_power_per_ray[good] = final_power_shadow[good] / ticket["histogram"][good]
 
         go = numpy.where(shadow_beam._beam.rays[:, 9] == 1)
