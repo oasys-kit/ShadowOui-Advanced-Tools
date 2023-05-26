@@ -53,7 +53,7 @@ except AttributeError:
     from setuptools import find_packages, setup
 
 NAME = 'OASYS1-ShadowOui-Advanced-Tools'
-VERSION = '1.0.113'
+VERSION = '1.0.114'
 ISRELEASED = True
 
 DESCRIPTION = 'ShadowOui advanced simulation tools'
@@ -65,20 +65,20 @@ URL = 'https://github.com/oasys-kit/ShadowOui-Advanced-Tools'
 DOWNLOAD_URL = 'https://github.com/oasys-kit/ShadowOui-Advanced-Tools'
 LICENSE = 'GPLv3'
 
-KEYWORDS = (
+KEYWORDS = [
     'raytracing',
     'simulator',
     'oasys1',
-)
+]
 
-CLASSIFIERS = (
+CLASSIFIERS = [
     'Development Status :: 5 - Production/Stable',
     'Environment :: X11 Applications :: Qt',
     'Environment :: Console',
     'Environment :: Plugins',
     'Programming Language :: Python :: 3',
     'Intended Audience :: Science/Research',
-)
+]
 
 SETUP_REQUIRES = (
     'setuptools',
