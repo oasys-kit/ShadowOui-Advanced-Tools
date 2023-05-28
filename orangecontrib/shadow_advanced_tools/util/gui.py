@@ -169,6 +169,7 @@ class PowerPlotXYWidget(QWidget):
                     beam.rays[:, 15] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 15]
                     beam.rays[:, 16] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 16]
                     beam.rays[:, 17] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 17]
+                    beam.rays[:, 9]  = 1
                 else:
                     incident_rays = previous_beam._beam.rays
                     transmitted_rays = current_beam._beam.rays
@@ -238,9 +239,11 @@ class PowerPlotXYWidget(QWidget):
         final_power_per_ray       = numpy.zeros(len(final_power_shadow))
         final_power_per_ray[good] = final_power_shadow[good] / ticket["histogram"][good]
 
-        go = numpy.where(shadow_beam._beam.rays[:, 9] == 1)
+        #go = numpy.where(shadow_beam._beam.rays[:, 9] == 1)
+        go = numpy.where(beam.rays[:, 9] == 1)
 
-        rays_energy = ShadowPhysics.getEnergyFromShadowK(shadow_beam._beam.rays[go, 10])
+        #rays_energy = ShadowPhysics.getEnergyFromShadowK(shadow_beam._beam.rays[go, 10])
+        rays_energy = ShadowPhysics.getEnergyFromShadowK(beam.rays[go, 10])
 
         ticket = beam.histo2(var_x, var_y, nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=1, ref=0)
 
@@ -345,6 +348,7 @@ class PowerPlotXYWidget(QWidget):
                     beam.rays[:, 15] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 15]
                     beam.rays[:, 16] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 16]
                     beam.rays[:, 17] = lost_rays_in_previous_beam[lost_that_were_good_rays_cursor][:, 17]
+                    beam.rays[:, 9]  = 1
                 else:
                     incident_rays = previous_beam._beam.rays
                     transmitted_rays = current_beam._beam.rays
