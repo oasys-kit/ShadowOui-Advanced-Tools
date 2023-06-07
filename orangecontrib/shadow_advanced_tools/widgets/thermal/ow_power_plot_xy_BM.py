@@ -135,7 +135,7 @@ class PowerPlotXYBM(AbstractPowerPlotXY):
                         index_flux = 5
                     else:
                         raise Exception("Xoppy result is not an Flux vs Energy distribution integrated in a rectangular space")
-            elif exchange_data.get_program_name() == "XOPPY" and exchange_data.get_widget_name() == "XWIGGLER":
+            elif exchange_data.get_program_name() == "XOPPY" and (exchange_data.get_widget_name() == "WS" or exchange_data.get_widget_name() == "XWIGGLER"):
                 index_flux = 1
             else:
                 raise Exception("Exchange data are not from a XOPPY BM widget")
