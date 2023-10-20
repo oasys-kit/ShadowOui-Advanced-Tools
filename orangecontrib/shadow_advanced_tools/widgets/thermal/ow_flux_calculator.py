@@ -52,14 +52,17 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox, QLabel, QSizePolicy
 from PyQt5.QtGui import QPixmap
 
+from matplotlib.patches import FancyArrowPatch, ArrowStyle
+
 import orangecanvas.resources as resources
 
 from orangewidget import gui
 from orangewidget.widget import OWAction
+from orangewidget.settings import Setting
 
 from oasys.widgets.exchange import DataExchangeObject
 from oasys.widgets import gui as oasysgui
-
+from oasys.util.oasys_util import get_fwhm
 from orangecontrib.shadow.util.shadow_objects import ShadowBeam
 from orangecontrib.shadow.util.shadow_util import ShadowCongruence
 from orangecontrib.shadow.widgets.gui.ow_automatic_element import AutomaticElement
@@ -90,6 +93,12 @@ class FluxCalculator(AutomaticElement):
     input_spectrum = None
     flux_index = -1
 
+    bandwidth_calculation = Setting(0)
+
+    e_min = Setting(0.0)
+    e_max = Setting(0.0)
+    n_bins = Setting(200)
+
     usage_path = os.path.join(resources.package_dirname("orangecontrib.shadow_advanced_tools.widgets.thermal"), "misc", "flux_calculator.png")
 
     def __init__(self):
@@ -100,20 +109,62 @@ class FluxCalculator(AutomaticElement):
         self.addAction(self.runaction)
 
         self.setMaximumWidth(self.CONTROL_AREA_WIDTH+10)
-        self.setMaximumHeight(580)
+        self.setMaximumHeight(660)
 
         box0 = gui.widgetBox(self.controlArea, "", orientation="horizontal")
         gui.button(box0, self, "Calculate Flux", callback=self.calculate_flux, height=45)
 
         tabs_setting = oasysgui.tabWidget(self.controlArea)
-        tabs_setting.setFixedHeight(440)
+        tabs_setting.setFixedHeight(510)
         tabs_setting.setFixedWidth(self.CONTROL_AREA_WIDTH-8)
 
+        tab_ban = oasysgui.createTabPage(tabs_setting, "Beam Bandwidth")
         tab_out = oasysgui.createTabPage(tabs_setting, "Flux Calculation Results")
         tab_usa = oasysgui.createTabPage(tabs_setting, "Use of the Widget")
         tab_usa.setStyleSheet("background-color: white;")
 
-        self.text = oasysgui.textArea(width=self.CONTROL_AREA_WIDTH-22, height=400)
+        bandwidth_box = oasysgui.widgetBox(tab_ban, "Bandwidth", addSpace=True, orientation="vertical")
+
+        gui.comboBox(bandwidth_box, self, "bandwidth_calculation", label="BW Calculation Mode", labelWidth=260,
+                     items=["Automatic", "Manual"], sendSelectedValue=False, orientation="horizontal", callback=self.set_bw_calculation_mode)
+
+        self.bandwidth_box_1 = oasysgui.widgetBox(bandwidth_box, "", addSpace=True, orientation="vertical", height=90)
+        self.bandwidth_box_2 = oasysgui.widgetBox(bandwidth_box, "", addSpace=True, orientation="vertical", height=90)
+
+        oasysgui.lineEdit(self.bandwidth_box_1, self, "e_min", "Energy min", labelWidth=200, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.bandwidth_box_1, self, "e_max", "Energy max", labelWidth=200, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(self.bandwidth_box_1, self, "n_bins", "Number of Bins", labelWidth=200, valueType=int, orientation="horizontal")
+
+        self.histo_energy = oasysgui.plotWindow(resetzoom=False,
+                                                autoScale=False,
+                                                logScale=False,
+                                                grid=False,
+                                                curveStyle=False,
+                                                colormap=False,
+                                                aspectRatio=False,
+                                                yInverted=False,
+                                                copy=False,
+                                                save=False,
+                                                print_=False,
+                                                control=False,
+                                                position=False,
+                                                roi=False,
+                                                mask=False,
+                                                fit=False)
+        self.histo_energy.setDefaultPlotLines(True)
+        self.histo_energy._toolbar.setVisible(False)
+        self.histo_energy._interactiveModeToolBar.setVisible(False)
+        self.histo_energy._outputToolBar.setVisible(False)
+        self.histo_energy.group.setVisible(False)
+        self.histo_energy._colorbar.setVisible(False)
+        self.histo_energy.setActiveCurveColor(color='blue')
+        self.histo_energy.setMinimumWidth(380)
+
+        tab_ban.layout().addWidget(self.histo_energy)
+
+        self.set_bw_calculation_mode()
+
+        self.text = oasysgui.textArea(width=self.CONTROL_AREA_WIDTH-22, height=470)
 
         tab_out.layout().addWidget(self.text)
 
@@ -127,6 +178,10 @@ class FluxCalculator(AutomaticElement):
         usage_box.layout().addWidget(label)
 
         gui.rubber(self.controlArea)
+
+    def set_bw_calculation_mode(self):
+        self.bandwidth_box_1.setVisible(self.bandwidth_calculation==1)
+        self.bandwidth_box_2.setVisible(self.bandwidth_calculation==0)
 
     def setBeam(self, beam):
         try:
@@ -171,7 +226,18 @@ class FluxCalculator(AutomaticElement):
     def calculate_flux(self):
         if not self.input_beam is None and not self.input_spectrum is None:
             try:
-                flux_factor, resolving_power, energy, ttext = calculate_flux_factor_and_resolving_power(self.input_beam)
+                if self.bandwidth_calculation==1:
+                    if self.e_min >= self.e_max: raise ValueError("Energy min should be < Energy max")
+                    if self.n_bins <= 0 : raise ValueError("Nr. bins should be > 0")
+
+                    erange = [self.e_min, self.e_max]
+                    nbins  = self.n_bins
+                else:
+                    erange = None
+                    nbins  = 200
+
+                self.plot_histo(shadow_beam=self.input_beam, erange=erange, nbins=nbins)
+                flux_factor, resolving_power, energy, ttext = calculate_flux_factor_and_resolving_power(shadow_beam=self.input_beam, erange=erange, nbins=nbins)
 
                 total_text = ttext
 
@@ -197,8 +263,45 @@ class FluxCalculator(AutomaticElement):
 
                 if self.IS_DEVELOP: raise exception
 
-def calculate_flux_factor_and_resolving_power(beam):
-    ticket = beam._beam.histo1(11, nbins=2, nolost=1)
+    def plot_histo(self, shadow_beam, erange=None, nbins=200):
+        self.histo_energy.clear()
+
+        ticket = shadow_beam._beam.histo1(11, nbins=nbins, xrange=erange, nolost=1, ref=23)
+
+        ticket['fwhm'], ticket['fwhm_quote'], ticket['fwhm_coordinates'] = get_fwhm(ticket['histogram'], ticket['bin_center'])
+
+        histogram = ticket['histogram_path']
+        bins = ticket['bin_path']
+        if ticket['fwhm'] == None: ticket['fwhm'] = 0.0
+
+        self.histo_energy.addCurve(bins, histogram, "Energy", symbol='', color='blue', replace=True) #'+', '^', ','
+        self.histo_energy.setGraphXLabel("Energy")
+        self.histo_energy.setGraphYLabel("Intensity")
+        self.histo_energy.setGraphTitle("Bandwidth: " + str(round(ticket['fwhm'], 4)) + " eV")
+        self.histo_energy.setInteractiveMode(mode='zoom')
+
+        n_patches = len(self.histo_energy._backend.ax.patches)
+        if (n_patches > 0): self.histo_energy._backend.ax.patches.remove(self.histo_energy._backend.ax.patches[n_patches-1])
+
+        if not ticket['fwhm'] == 0.0:
+            x_fwhm_i, x_fwhm_f = ticket['fwhm_coordinates']
+            x_fwhm_i, x_fwhm_f = x_fwhm_i, x_fwhm_f
+            y_fwhm             = ticket['fwhm_quote']
+
+
+            self.histo_energy._backend.ax.add_patch(FancyArrowPatch([x_fwhm_i, y_fwhm],
+                                                                    [x_fwhm_f, y_fwhm],
+                                                                    arrowstyle=ArrowStyle.CurveAB(head_width=2, head_length=4),
+                                                                    color='b',
+                                                                    linewidth=1.5))
+        if min(histogram) < 0: self.histo_energy.setGraphYLimits(min(histogram), max(histogram))
+        else:                  self.histo_energy.setGraphYLimits(0, max(histogram))
+
+        self.histo_energy.replot()
+
+
+def calculate_flux_factor_and_resolving_power(shadow_beam, nbins=200, erange=None):
+    ticket = shadow_beam._beam.histo1(11, nbins=nbins, xrange=None, nolost=1)
 
     energy_min = ticket['xrange'][0]
     energy_max = ticket['xrange'][-1]
@@ -209,15 +312,15 @@ def calculate_flux_factor_and_resolving_power(beam):
     if Denergy_source == 0.0:
         raise ValueError("This calculation is not possibile for a single energy value")
 
-    ticket = beam._beam.histo1(11, nbins=200, nolost=1, ref=23)
+    ticket = shadow_beam._beam.histo1(11, nbins=nbins, nolost=1, xrange=erange, ref=23)
 
-    initial_intensity = len(beam._beam.rays)
+    initial_intensity = len(shadow_beam._beam.rays)
     final_intensity = ticket['intensity']
     efficiency = final_intensity/initial_intensity
     bandwidth = ticket['fwhm']
 
-    if bandwidth == 0.0:
-        raise ValueError("Bandwidth is 0.0: calculation not possible")
+    if bandwidth == 0.0 or bandwidth is None:
+        raise ValueError("Bandwidth is 0.0 or None: calculation not possible")
 
     resolving_power = energy/bandwidth
 
