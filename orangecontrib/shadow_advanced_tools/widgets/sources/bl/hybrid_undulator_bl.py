@@ -189,15 +189,18 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
         integrated_flux_array = numpy.zeros(energy_points)
         nr_rays_array = numpy.zeros(energy_points)
         energies = numpy.linspace(widget.energy, widget.energy_to, energy_points)
-        prog_bars = numpy.linspace(20, 50, energy_points)
 
         total_power = None
-
         delta_e = energies[1] - energies[0]
 
-        if widget.use_stokes == 1: flux_from_stokes = __get_integrated_flux_from_stokes(widget, energies)
-        else:                      flux_from_stokes = numpy.zeros(energy_points)
-
+        if widget.use_stokes == 1:
+            widget.setStatusMessage("Computing integrated flux from Radiation Stokes Parameters")
+            widget.progressBarSet(25)
+            flux_from_stokes = __get_integrated_flux_from_stokes(widget, energies)
+            prog_bars = numpy.linspace(30, 50, energy_points)
+        else:
+            flux_from_stokes = numpy.zeros(energy_points)
+            prog_bars = numpy.linspace(20, 50, energy_points)
 
         for energy, i in zip(energies, range(energy_points)):
             widget.setStatusMessage("Running SRW for energy: " + str(energy))
@@ -748,7 +751,6 @@ def __get_integrated_flux_from_stokes(widget, energies):
     srwl.CalcStokesUR(stkF, elecBeam, magFldCnt.arMagFld[0], arPrecF)
 
     return stkF.arS
-
 
 def __run_SRW_calculation(widget, energy, flux_from_stokes=0.0, do_cumulated_calculations=False):
     __check_SRW_fields(widget)
