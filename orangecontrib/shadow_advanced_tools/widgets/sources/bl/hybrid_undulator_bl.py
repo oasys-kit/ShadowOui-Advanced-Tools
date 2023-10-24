@@ -195,10 +195,14 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
 
         delta_e = energies[1] - energies[0]
 
+        if widget.use_stokes == 1: flux_from_stokes = __get_integrated_flux_from_stokes(widget, energies)
+        else:                      flux_from_stokes = numpy.zeros(energy_points)
+
+
         for energy, i in zip(energies, range(energy_points)):
             widget.setStatusMessage("Running SRW for energy: " + str(energy))
 
-            x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, _ = __run_SRW_calculation(widget, energy, False)
+            x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, _ = __run_SRW_calculation(widget, energy, flux_from_stokes[i], False)
 
             x_array[i] = x
             z_array[i] = z
@@ -713,9 +717,41 @@ def __check_SRW_fields(widget):
         congruence.checkDir(widget.source_dimension_srw_file)
         congruence.checkDir(widget.angular_distribution_srw_file)
 
-def __run_SRW_calculation(widget, energy, do_cumulated_calculations=False):
-    __check_SRW_fields(widget)
+def __get_integrated_flux_from_stokes(widget, energies):
+    eStart = energies[0]
+    eFin   = energies[-1]
+    ne     = len(energies)
 
+    magFldCnt = __create_undulator(widget)
+    elecBeam  = __create_electron_beam(widget, distribution_type=Distribution.DIVERGENCE, position=widget.waist_position)
+    wfr       = __create_initial_wavefront_mesh(widget, elecBeam, energies[0])
+
+    h_max = int(2.5*eFin/resonance_energy(widget, harmonic=1))
+
+    arPrecF = [0] * 5  # for spectral flux vs photon energy
+    arPrecF[0] = 1  # initial UR harmonic to take into account
+    arPrecF[1] = h_max  # final UR harmonic to take into account
+    arPrecF[2] = 1.5  # longitudinal integration precision parameter
+    arPrecF[3] = 1.5  # azimuthal integration precision parameter
+    arPrecF[4] = 1  # calculate flux (1) or flux per unit surface (2)
+
+    stkF = SRWLStokes()  # for spectral flux vs photon energy
+    stkF.allocate(ne, 1, 1)  # numbers of points vs photon energy, horizontal and vertical positions
+    stkF.mesh.zStart = wfr.mesh.zStart  # longitudinal position [m] at which UR has to be calculated
+    stkF.mesh.eStart = eStart  # initial photon energy [eV]
+    stkF.mesh.eFin = eFin # final photon energy [eV]
+    stkF.mesh.xStart = wfr.mesh.xStart  # initial horizontal position [m]
+    stkF.mesh.xFin = wfr.mesh.xFin  # final horizontal position [m]
+    stkF.mesh.yStart = wfr.mesh.yStart  # initial vertical position [m]
+    stkF.mesh.yFin = wfr.mesh.yFin  # final vertical position [m]
+
+    srwl.CalcStokesUR(stkF, elecBeam, magFldCnt.arMagFld[0], arPrecF)
+
+    return stkF.arS
+
+
+def __run_SRW_calculation(widget, energy, flux_from_stokes=0.0, do_cumulated_calculations=False):
+    __check_SRW_fields(widget)
     __calculate_waist_position(widget, energy)
 
     magFldCnt = __create_undulator(widget)
@@ -737,33 +773,8 @@ def __run_SRW_calculation(widget, energy, do_cumulated_calculations=False):
     dx = (x[1] - x[0]) * 1e3  # mm for power computations
     dy = (z[1] - z[0]) * 1e3
 
-    def get_integrated_flux_from_stokes():
-        h_max = int(2.5*wfr.mesh.eStart/resonance_energy(widget, harmonic=1))
-
-        arPrecF = [0] * 5  # for spectral flux vs photon energy
-        arPrecF[0] = 1  # initial UR harmonic to take into account
-        arPrecF[1] = h_max  # final UR harmonic to take into account
-        arPrecF[2] = 1.5  # longitudinal integration precision parameter
-        arPrecF[3] = 1.5  # azimuthal integration precision parameter
-        arPrecF[4] = 1  # calculate flux (1) or flux per unit surface (2)
-
-        stkF = SRWLStokes()  # for spectral flux vs photon energy
-        # srio stkF.allocate(10000, 1, 1) #numbers of points vs photon energy, horizontal and vertical positions
-        stkF.allocate(1, 1, 1)  # numbers of points vs photon energy, horizontal and vertical positions
-        stkF.mesh.zStart = wfr.mesh.zStart  # longitudinal position [m] at which UR has to be calculated
-        stkF.mesh.eStart = wfr.mesh.eStart  # initial photon energy [eV]
-        stkF.mesh.eFin = wfr.mesh.eStart # final photon energy [eV]
-        stkF.mesh.xStart = wfr.mesh.xStart  # initial horizontal position [m]
-        stkF.mesh.xFin = wfr.mesh.xFin  # final horizontal position [m]
-        stkF.mesh.yStart = wfr.mesh.yStart  # initial vertical position [m]
-        stkF.mesh.yFin = wfr.mesh.yFin  # final vertical position [m]
-
-        srwl.CalcStokesUR(stkF, elecBeam, magFldCnt.arMagFld[0], arPrecF)
-
-        return stkF.arS[0]
-
     if widget.use_stokes == 0: integrated_flux = intensity_angular_distribution.sum()*dx*dy # this is single electron -> no emittance
-    else:                      integrated_flux = get_integrated_flux_from_stokes()          # recompute the flux with the whole beam (no single electron)
+    else:                      integrated_flux = flux_from_stokes                           # recompute the flux with the whole beam (no single electron)
 
     if widget.compute_power: total_power = widget.power_step if widget.power_step > 0 else integrated_flux * (1e3 * widget.energy_step * codata.e)
     else:                    total_power = None
