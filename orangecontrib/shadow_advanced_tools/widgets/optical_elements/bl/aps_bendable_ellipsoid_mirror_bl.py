@@ -102,7 +102,7 @@ def apply_bender_surface(widget, input_beam, shadow_oe):
     elif widget.shape == RECTANGLE:
         if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = round(bender_parameter[1], 5)
 
-    ST.write_shadow_surface(bender_data_to_plot.z_bender_correction.T, numpy.round(x, 6), numpy.round(y, 6), widget.output_file_name_full)
+    ST.write_shadow_surface(bender_data_to_plot.z_bender_correction.T, numpy.round(bender_data_to_plot.x, 6), numpy.round(bender_data_to_plot.y, 6), widget.output_file_name_full)
 
     # Add new surface as figure error
     shadow_oe._oe.F_RIPPLE = 1
