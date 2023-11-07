@@ -21,11 +21,11 @@ from oasys.util.oasys_util import TriggerIn
 from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowPreProcessorData
 from orangecontrib.shadow.widgets.gui import ow_ellipsoid_element, ow_optical_element
 
-from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.bendable_ellipsoid_mirror_bl import *
+from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.aps_bendable_ellipsoid_mirror_bl import *
 
 class BendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
-    name = "Bendable Ellipsoid Mirror"
-    description = "Shadow OE: Bendable Ellipsoid Mirror"
+    name = "APS Bendable Ellipsoid Mirror"
+    description = "Shadow OE: APS Bendable Ellipsoid Mirror"
     icon = "icons/bendable_ellipsoid_mirror.png"
     maintainer = "Luca Rebuffi"
     maintainer_email = "lrebuffi(@at@)anl.gov"
