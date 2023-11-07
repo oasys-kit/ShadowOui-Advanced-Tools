@@ -47,12 +47,11 @@
 
 import numpy
 
-from orangecontrib.shadow.util.shadow_objects import ShadowBeam
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
 from Shadow import ShadowTools as ST
 
-from oasys.widgets.abstract.benders.double_rod_bendable_ellispoid_mirror import DoubleRodBenderParameters, calculate_bender_correction
+from syned.tools.benders.double_rod_bendable_ellispoid_mirror import DoubleRodBenderParameters, calculate_bender_correction
 
 def apply_bender_surface(widget, shadow_oe):
     x = numpy.linspace(-widget.dim_x_minus, widget.dim_x_plus, widget.bender_bin_x + 1)
