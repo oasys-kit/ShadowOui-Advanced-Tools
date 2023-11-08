@@ -1,4 +1,5 @@
 import sys
+import numpy
 
 from matplotlib import cm
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -21,7 +22,7 @@ from oasys.util.oasys_util import TriggerIn
 from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowPreProcessorData, ShadowBeam
 from orangecontrib.shadow.widgets.gui import ow_ellipsoid_element, ow_optical_element
 
-from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.double_rod_bendable_ellispoid_mirror_bl import *
+from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.double_rod_bendable_ellispoid_mirror_bl import apply_bender_surface
 
 class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     name = "Double-Rod Bendable Ellipsoid Mirror"
@@ -295,25 +296,25 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
         self.output_file_name_full = congruence.checkFileName(self.output_file_name)
 
     def completeOperations(self, shadow_oe):
-        bender_data_to_plot = apply_bender_surface(widget=self, shadow_oe=shadow_oe)
+        bender_data = apply_bender_surface(widget=self, shadow_oe=shadow_oe)
 
-        self.plot1D(bender_data_to_plot.y, bender_data_to_plot.bender_profile, y_values_2=bender_data_to_plot.ideal_profile,
-                    index=0, title=bender_data_to_plot.titles[0], um=1)
-        self.plot1D(bender_data_to_plot.y, bender_data_to_plot.correction_profile,
-                    index=1, title=bender_data_to_plot.titles[1])
+        self.plot1D(bender_data.y, bender_data.bender_profile, y_values_2=bender_data.ideal_profile,
+                    index=0, title=bender_data.titles[0], um=1)
+        self.plot1D(bender_data.y, bender_data.correction_profile,
+                    index=1, title=bender_data.titles[1])
 
-        self.plot3D(bender_data_to_plot.x,
-                    bender_data_to_plot.y,
-                    bender_data_to_plot.z_bender_correction_no_figure_error,
+        self.plot3D(bender_data.x,
+                    bender_data.y,
+                    bender_data.z_bender_correction_no_figure_error,
                     index=2, title="Ideal - Bender Surfaces")
 
         if self.modified_surface > 0:
-            self.plot3D(bender_data_to_plot.x,
-                        bender_data_to_plot.y,
-                        bender_data_to_plot.z_figure_error,  index=3, title="Figure Error Surface")
-            self.plot3D(bender_data_to_plot.x,
-                        bender_data_to_plot.y,
-                        bender_data_to_plot.z_bender_correction, index=4, title="Ideal - Bender + Figure Error Surfaces")
+            self.plot3D(bender_data.x,
+                        bender_data.y,
+                        bender_data.z_figure_error,  index=3, title="Figure Error Surface")
+            self.plot3D(bender_data.x,
+                        bender_data.y,
+                        bender_data.z_bender_correction, index=4, title="Ideal - Bender + Figure Error Surfaces")
 
         # Redo raytracing with the bender correction as error profile
         super().completeOperations(shadow_oe)

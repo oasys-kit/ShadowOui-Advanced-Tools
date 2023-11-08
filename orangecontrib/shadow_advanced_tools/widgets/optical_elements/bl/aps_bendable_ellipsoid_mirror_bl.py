@@ -44,69 +44,55 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE         #
 # POSSIBILITY OF SUCH DAMAGE.                                             #
 # ----------------------------------------------------------------------- #
-
-from orangecontrib.shadow.util.shadow_objects import ShadowBeam
+import numpy
+from Shadow import ShadowTools as ST
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
-from Shadow import ShadowTools as ST
+from syned.tools.benders.aps_bendable_ellipsoid_mirror import ApsBenderParameters, calculate_bender_correction, TRAPEZIUM, DOUBLE_MOMENTUM
 
-from syned.tools.benders.aps_bendable_ellipsoid_mirror import *
+def apply_bender_surface(widget, shadow_oe):
+    input_parameters = ApsBenderParameters(dim_x_minus           = widget.dim_x_minus,
+                                           dim_x_plus            = widget.dim_x_plus,
+                                           bender_bin_x          = widget.bender_bin_x,
+                                           dim_y_minus           = widget.dim_y_minus,
+                                           dim_y_plus            = widget.dim_y_plus,
+                                           bender_bin_y          = widget.bender_bin_y,
+                                           optimized_length      = widget.optimized_length if widget.which_length==1 else None,
+                                           p                     = widget.object_side_focal_distance,
+                                           q                     = widget.image_side_focal_distance,
+                                           grazing_angle         = numpy.radians(90 - widget.incidence_angle_respect_to_normal),
+                                           E                     = widget.E,
+                                           h                     = widget.h,
+                                           figure_error_mesh     = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name) if (widget.modified_surface==1 and widget.ms_type_of_defect==2) else None,
+                                           n_fit_steps           = widget.n_fit_steps,
+                                           workspace_units_to_m  = widget.workspace_units_to_m,
+                                           workspace_units_to_mm = widget.workspace_units_to_mm,
+                                           shape                 = widget.shape,
+                                           kind_of_bender        = widget.kind_of_bender,
+                                           M1                    = widget.M1,
+                                           M1_min                = widget.M1_min,
+                                           M1_max                = widget.M1_max,
+                                           M1_fixed              = widget.M1_fixed,
+                                           e                     = widget.e,
+                                           e_min                 = widget.e_min,
+                                           e_max                 = widget.e_max,
+                                           e_fixed               = widget.e_fixed,
+                                           ratio                 = widget.ratio,
+                                           ratio_min             = widget.ratio_min,
+                                           ratio_max             = widget.ratio_max,
+                                           ratio_fixed           = widget.ratio_fixed)
 
-def apply_bender_surface(widget, input_beam, shadow_oe):
-    shadow_oe_temp  = shadow_oe.duplicate()
-    input_beam_temp = input_beam.duplicate(history=False)
+    bender_data = calculate_bender_correction(input_parameters)
 
-    widget.manage_acceptance_slits(shadow_oe_temp)
+    widget.M1_out = bender_data.M1_out
+    if widget.shape == TRAPEZIUM:                widget.e_out     = bender_data.e_out
+    if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = bender_data.ratio_out
 
-    ShadowBeam.traceFromOE(input_beam_temp,
-                           shadow_oe_temp,
-                           write_start_file=0,
-                           write_end_file=0,
-                           widget_class_name=type(widget).__name__)
-
-    input_parameters = ApsBenderParameters()
-    input_parameters.dim_x_minus           = widget.dim_x_minus
-    input_parameters.dim_x_plus            = widget.dim_x_plus
-    input_parameters.bender_bin_x          = widget.bender_bin_x
-    input_parameters.dim_y_minus           = widget.dim_y_minus
-    input_parameters.dim_y_plus            = widget.dim_y_plus
-    input_parameters.bender_bin_y          = widget.bender_bin_y
-    input_parameters.conic_coefficients    = shadow_oe_temp._oe.CCC
-    if widget.which_length == 1: input_parameters.optimized_length = widget.optimized_length
-    input_parameters.n_fit_steps           = widget.n_fit_steps
-    input_parameters.E                     = widget.E
-    input_parameters.h                     = widget.h
-    input_parameters.shape                 = widget.shape
-    input_parameters.kind_of_bender        = widget.kind_of_bender
-    input_parameters.M1                    = widget.M1
-    input_parameters.M1_min                = widget.M1_min
-    input_parameters.M1_max                = widget.M1_max
-    input_parameters.M1_fixed              = widget.M1_fixed
-    input_parameters.e                     = widget.e
-    input_parameters.e_min                 = widget.e_min
-    input_parameters.e_max                 = widget.e_max
-    input_parameters.e_fixed               = widget.e_fixed
-    input_parameters.ratio                 = widget.ratio
-    input_parameters.ratio_min             = widget.ratio_min
-    input_parameters.ratio_max             = widget.ratio_max
-    input_parameters.ratio_fixed           = widget.ratio_fixed
-    input_parameters.workspace_units_to_m  = widget.workspace_units_to_m
-    if widget.modified_surface == 1 and widget.ms_type_of_defect == 2: input_parameters.figure_error = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name)
-
-    bender_parameter, bender_data_to_plot = calculate_bender_correction(input_parameters)
-
-    widget.M1_out = round(bender_parameter[0], int(6 * widget.workspace_units_to_mm))
-    if widget.shape == TRAPEZIUM:
-        widget.e_out = round(bender_parameter[1], 5)
-        if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = round(bender_parameter[2], 5)
-    elif widget.shape == RECTANGLE:
-        if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = round(bender_parameter[1], 5)
-
-    ST.write_shadow_surface(bender_data_to_plot.z_bender_correction.T, numpy.round(bender_data_to_plot.x, 6), numpy.round(bender_data_to_plot.y, 6), widget.output_file_name_full)
+    ST.write_shadow_surface(bender_data.z_bender_correction.T, numpy.round(bender_data.x, 6), numpy.round(bender_data.y, 6), widget.output_file_name_full)
 
     # Add new surface as figure error
     shadow_oe._oe.F_RIPPLE = 1
     shadow_oe._oe.F_G_S = 2
     shadow_oe._oe.FILE_RIP = bytes(widget.output_file_name_full, 'utf-8')
 
-    return shadow_oe, bender_data_to_plot
+    return bender_data
