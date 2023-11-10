@@ -48,45 +48,47 @@ import numpy
 from Shadow import ShadowTools as ST
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
-from syned.tools.benders.aps_bendable_ellipsoid_mirror import ApsBenderParameters, calculate_bender_correction, TRAPEZIUM, DOUBLE_MOMENTUM
+from syned.tools.benders.aps_bender_manager import APSStandardBenderManager, APSBenderStructuralParameters, APSBenderFitParameters, MirrorShape, BenderType
 
 def apply_bender_surface(widget, shadow_oe):
-    input_parameters = ApsBenderParameters(dim_x_minus           = widget.dim_x_minus,
-                                           dim_x_plus            = widget.dim_x_plus,
-                                           bender_bin_x          = widget.bender_bin_x,
-                                           dim_y_minus           = widget.dim_y_minus,
-                                           dim_y_plus            = widget.dim_y_plus,
-                                           bender_bin_y          = widget.bender_bin_y,
-                                           optimized_length      = widget.optimized_length if widget.which_length==1 else None,
-                                           p                     = widget.object_side_focal_distance,
-                                           q                     = widget.image_side_focal_distance,
-                                           grazing_angle         = numpy.radians(90 - widget.incidence_angle_respect_to_normal),
-                                           E                     = widget.E,
-                                           h                     = widget.h,
-                                           figure_error_mesh     = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name) if (widget.modified_surface==1 and widget.ms_type_of_defect==2) else None,
-                                           n_fit_steps           = widget.n_fit_steps,
-                                           workspace_units_to_m  = widget.workspace_units_to_m,
-                                           workspace_units_to_mm = widget.workspace_units_to_mm,
-                                           shape                 = widget.shape,
-                                           kind_of_bender        = widget.kind_of_bender,
-                                           M1                    = widget.M1,
-                                           M1_min                = widget.M1_min,
-                                           M1_max                = widget.M1_max,
-                                           M1_fixed              = widget.M1_fixed,
-                                           e                     = widget.e,
-                                           e_min                 = widget.e_min,
-                                           e_max                 = widget.e_max,
-                                           e_fixed               = widget.e_fixed,
-                                           ratio                 = widget.ratio,
-                                           ratio_min             = widget.ratio_min,
-                                           ratio_max             = widget.ratio_max,
-                                           ratio_fixed           = widget.ratio_fixed)
+    bender_structural_parameters = APSBenderStructuralParameters(dim_x_minus           = widget.dim_x_minus,
+                                                                 dim_x_plus            = widget.dim_x_plus,
+                                                                 bender_bin_x          = widget.bender_bin_x,
+                                                                 dim_y_minus           = widget.dim_y_minus,
+                                                                 dim_y_plus            = widget.dim_y_plus,
+                                                                 bender_bin_y          = widget.bender_bin_y,
+                                                                 p                     = widget.object_side_focal_distance,
+                                                                 q                     = widget.image_side_focal_distance,
+                                                                 grazing_angle         = numpy.radians(90 - widget.incidence_angle_respect_to_normal),
+                                                                 E                     = widget.E,
+                                                                 h                     = widget.h,
+                                                                 figure_error_mesh     = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name) if (widget.modified_surface==1 and widget.ms_type_of_defect==2) else None,
+                                                                 shape                 = widget.shape,
+                                                                 bender_type           = widget.kind_of_bender,
+                                                                 workspace_units_to_m  = widget.workspace_units_to_m,
+                                                                 workspace_units_to_mm = widget.workspace_units_to_mm)
 
-    bender_data = calculate_bender_correction(input_parameters)
+    bender_fit_paramters = APSBenderFitParameters(optimized_length = widget.optimized_length if widget.which_length==1 else None,
+                                                  n_fit_steps      = widget.n_fit_steps,
+                                                  M1               = widget.M1,
+                                                  M1_min           = widget.M1_min,
+                                                  M1_max           = widget.M1_max,
+                                                  M1_fixed         = widget.M1_fixed,
+                                                  e                = widget.e,
+                                                  e_min            = widget.e_min,
+                                                  e_max            = widget.e_max,
+                                                  e_fixed          = widget.e_fixed,
+                                                  ratio            = widget.ratio,
+                                                  ratio_min        = widget.ratio_min,
+                                                  ratio_max        = widget.ratio_max,
+                                                  ratio_fixed      = widget.ratio_fixed)
+
+    bender_manager = APSStandardBenderManager(bender_structural_parameters=bender_structural_parameters)
+    bender_data    = bender_manager.fit_bender_at_focus_position(bender_fit_paramters)
 
     widget.M1_out = bender_data.M1_out
-    if widget.shape == TRAPEZIUM:                widget.e_out     = bender_data.e_out
-    if widget.kind_of_bender == DOUBLE_MOMENTUM: widget.ratio_out = bender_data.ratio_out
+    if widget.shape == MirrorShape.TRAPEZIUM:               widget.e_out     = bender_data.e_out
+    if widget.kind_of_bender == BenderType.DOUBLE_MOMENTUM: widget.ratio_out = bender_data.ratio_out
 
     ST.write_shadow_surface(bender_data.z_bender_correction.T, numpy.round(bender_data.x, 6), numpy.round(bender_data.y, 6), widget.output_file_name_full)
 
