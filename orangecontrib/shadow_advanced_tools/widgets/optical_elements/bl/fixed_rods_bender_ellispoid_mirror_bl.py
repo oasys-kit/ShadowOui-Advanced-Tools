@@ -104,23 +104,3 @@ def apply_bender_surface(widget, shadow_oe):
 
     return bender_data
 
-    bender_data = calculate_bender_correction(input_parameters)
-
-    widget.R0_out       = bender_data.R0_out
-    widget.eta_out      = bender_data.eta_out
-    widget.W2_out       = bender_data.W2_out
-    widget.alpha        = bender_data.alpha
-    widget.W0           = bender_data.W0
-    widget.F_upstream   = bender_data.F_upstream
-    widget.F_downstream = bender_data.F_downstream
-
-    ST.write_shadow_surface(bender_data.z_bender_correction.T, numpy.round(bender_data.x, 6), numpy.round(bender_data.y, 6), widget.output_file_name_full)
-
-    # Add new surface as figure error
-    shadow_oe._oe.F_RIPPLE = 1
-    shadow_oe._oe.F_G_S = 2
-    shadow_oe._oe.FILE_RIP = bytes(widget.output_file_name_full, 'utf-8')
-
-    return bender_data
-
-
