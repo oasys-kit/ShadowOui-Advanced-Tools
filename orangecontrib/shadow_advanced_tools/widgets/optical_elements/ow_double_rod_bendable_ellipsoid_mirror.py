@@ -22,7 +22,7 @@ from oasys.util.oasys_util import TriggerIn
 from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowPreProcessorData, ShadowBeam
 from orangecontrib.shadow.widgets.gui import ow_ellipsoid_element, ow_optical_element
 
-from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.double_rod_bendable_ellispoid_mirror_bl import apply_bender_surface
+from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.fixed_rods_bender_ellispoid_mirror_bl import apply_bender_surface
 
 class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
     name = "Double-Rod Bendable Ellipsoid Mirror"

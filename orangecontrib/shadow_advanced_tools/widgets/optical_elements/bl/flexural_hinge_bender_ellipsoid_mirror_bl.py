@@ -48,42 +48,42 @@ import numpy
 from Shadow import ShadowTools as ST
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
-from syned.tools.benders.aps_bender_manager import APSStandardBenderManager, APSBenderStructuralParameters, APSBenderFitParameters, MirrorShape, BenderType
+from syned.tools.benders.flexural_hinge_bender_manager import FlexuralHingeStandardBenderManager, FlexuralHingeBenderStructuralParameters, FlexuralHingeBenderFitParameters, MirrorShape, BenderType
 
 def apply_bender_surface(widget, shadow_oe):
-    bender_structural_parameters = APSBenderStructuralParameters(dim_x_minus           = widget.dim_x_minus,
-                                                                 dim_x_plus            = widget.dim_x_plus,
-                                                                 bender_bin_x          = widget.bender_bin_x,
-                                                                 dim_y_minus           = widget.dim_y_minus,
-                                                                 dim_y_plus            = widget.dim_y_plus,
-                                                                 bender_bin_y          = widget.bender_bin_y,
-                                                                 p                     = widget.object_side_focal_distance,
-                                                                 q                     = widget.image_side_focal_distance,
-                                                                 grazing_angle         = numpy.radians(90 - widget.incidence_angle_respect_to_normal),
-                                                                 E                     = widget.E,
-                                                                 h                     = widget.h,
-                                                                 figure_error_mesh     = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name) if (widget.modified_surface==1 and widget.ms_type_of_defect==2) else None,
-                                                                 shape                 = widget.shape,
-                                                                 bender_type           = widget.kind_of_bender,
-                                                                 workspace_units_to_m  = widget.workspace_units_to_m,
-                                                                 workspace_units_to_mm = widget.workspace_units_to_mm)
+    bender_structural_parameters = FlexuralHingeBenderStructuralParameters(dim_x_minus           = widget.dim_x_minus,
+                                                                           dim_x_plus            = widget.dim_x_plus,
+                                                                           bender_bin_x          = widget.bender_bin_x,
+                                                                           dim_y_minus           = widget.dim_y_minus,
+                                                                           dim_y_plus            = widget.dim_y_plus,
+                                                                           bender_bin_y          = widget.bender_bin_y,
+                                                                           p                     = widget.object_side_focal_distance,
+                                                                           q                     = widget.image_side_focal_distance,
+                                                                           grazing_angle         = numpy.radians(90 - widget.incidence_angle_respect_to_normal),
+                                                                           E                     = widget.E,
+                                                                           h                     = widget.h,
+                                                                           figure_error_mesh     = ShadowPreProcessor.read_surface_error_file(widget.ms_defect_file_name) if (widget.modified_surface==1 and widget.ms_type_of_defect==2) else None,
+                                                                           shape                 = widget.shape,
+                                                                           bender_type           = widget.kind_of_bender,
+                                                                           workspace_units_to_m  = widget.workspace_units_to_m,
+                                                                           workspace_units_to_mm = widget.workspace_units_to_mm)
 
-    bender_fit_paramters = APSBenderFitParameters(optimized_length = widget.optimized_length if widget.which_length==1 else None,
-                                                  n_fit_steps      = widget.n_fit_steps,
-                                                  M1               = widget.M1,
-                                                  M1_min           = widget.M1_min,
-                                                  M1_max           = widget.M1_max,
-                                                  M1_fixed         = widget.M1_fixed,
-                                                  e                = widget.e,
-                                                  e_min            = widget.e_min,
-                                                  e_max            = widget.e_max,
-                                                  e_fixed          = widget.e_fixed,
-                                                  ratio            = widget.ratio,
-                                                  ratio_min        = widget.ratio_min,
-                                                  ratio_max        = widget.ratio_max,
-                                                  ratio_fixed      = widget.ratio_fixed)
+    bender_fit_paramters = FlexuralHingeBenderFitParameters(optimized_length = widget.optimized_length if widget.which_length==1 else None,
+                                                            n_fit_steps      = widget.n_fit_steps,
+                                                            M1               = widget.M1,
+                                                            M1_min           = widget.M1_min,
+                                                            M1_max           = widget.M1_max,
+                                                            M1_fixed         = widget.M1_fixed,
+                                                            e                = widget.e,
+                                                            e_min            = widget.e_min,
+                                                            e_max            = widget.e_max,
+                                                            e_fixed          = widget.e_fixed,
+                                                            ratio            = widget.ratio,
+                                                            ratio_min        = widget.ratio_min,
+                                                            ratio_max        = widget.ratio_max,
+                                                            ratio_fixed      = widget.ratio_fixed)
 
-    bender_manager = APSStandardBenderManager(bender_structural_parameters=bender_structural_parameters)
+    bender_manager = FlexuralHingeStandardBenderManager(bender_structural_parameters=bender_structural_parameters)
     bender_data    = bender_manager.fit_bender_at_focus_position(bender_fit_paramters)
 
     widget.M1_out = bender_data.M1_out
