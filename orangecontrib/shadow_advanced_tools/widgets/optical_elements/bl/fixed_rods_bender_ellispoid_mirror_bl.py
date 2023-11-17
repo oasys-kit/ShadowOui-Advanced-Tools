@@ -49,7 +49,7 @@ import numpy
 from Shadow import ShadowTools as ST
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
-from syned.tools.benders.fixed_rods_bender_manager import FixedRodsStandardBenderManager, FixedRodsBenderStructuralParameters, FixedRodsBenderFitParameters
+from srxraylib.profiles.benders.fixed_rods_bender_manager import FixedRodsStandardBenderManager, FixedRodsBenderStructuralParameters, FixedRodsBenderFitParameters
 
 def apply_bender_surface(widget, shadow_oe):
     bender_structural_parameters = FixedRodsBenderStructuralParameters(dim_x_minus           = widget.dim_x_minus,

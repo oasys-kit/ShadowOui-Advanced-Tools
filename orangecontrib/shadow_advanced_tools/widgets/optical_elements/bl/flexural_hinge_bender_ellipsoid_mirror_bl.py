@@ -48,7 +48,7 @@ import numpy
 from Shadow import ShadowTools as ST
 from orangecontrib.shadow.util.shadow_util import ShadowPreProcessor
 
-from syned.tools.benders.flexural_hinge_bender_manager import FlexuralHingeStandardBenderManager, FlexuralHingeBenderStructuralParameters, FlexuralHingeBenderFitParameters, MirrorShape, BenderType
+from srxraylib.profiles.benders.flexural_hinge_bender_manager import FlexuralHingeStandardBenderManager, FlexuralHingeBenderStructuralParameters, FlexuralHingeBenderFitParameters, MirrorShape, BenderType
 
 def apply_bender_surface(widget, shadow_oe):
     bender_structural_parameters = FlexuralHingeBenderStructuralParameters(dim_x_minus           = widget.dim_x_minus,
