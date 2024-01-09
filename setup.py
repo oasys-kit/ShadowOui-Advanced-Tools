@@ -53,7 +53,7 @@ except AttributeError:
     from setuptools import find_packages, setup
 
 NAME = 'OASYS1-ShadowOui-Advanced-Tools'
-VERSION = '1.0.126'
+VERSION = '1.0.127'
 ISRELEASED = True
 
 DESCRIPTION = 'ShadowOui advanced simulation tools'
@@ -143,5 +143,5 @@ if __name__ == '__main__':
               entry_points = ENTRY_POINTS,
               namespace_packages=NAMESPACE_PACAKGES,
               include_package_data = True,
-              zip_safe = True,
+              zip_safe = False,
               )
