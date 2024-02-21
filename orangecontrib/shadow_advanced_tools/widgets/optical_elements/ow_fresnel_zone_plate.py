@@ -5,8 +5,6 @@ from PyQt5.QtWidgets import QMessageBox
 
 from matplotlib import cm, rcParams
 
-from scipy.interpolate import RectBivariateSpline, interp1d
-
 from silx.gui.plot import Plot2D
 
 from orangewidget import gui, widget
@@ -15,11 +13,9 @@ from oasys.widgets import gui as oasysgui
 from oasys.widgets import congruence
 from oasys.util.oasys_util import EmittingStream, TTYGrabber, TriggerIn
 
-from srxraylib.util.inverse_method_sampler import Sampler2D
-
-from orangecontrib.shadow.util.shadow_objects import ShadowOpticalElement, ShadowCompoundOpticalElement, ShadowBeam
-from orangecontrib.shadow.util.shadow_util import ShadowCongruence, ShadowPhysics, ShadowMath
-from orangecontrib.shadow_advanced_tools.util.fresnel_zone_plates.fresnel_zone_plate_simulator import FZPAttributes, FZPSimulatorOptions, FresnelZonePlateSimulator
+from orangecontrib.shadow.util.shadow_objects import ShadowBeam
+from orangecontrib.shadow.util.shadow_util import ShadowCongruence
+from orangecontrib.shadow_advanced_tools.widgets.optical_elements.bl.fresnel_zone_plate import ShadowFresnelZonePlate, FZPCalculationInputParameters, FZPAttributes, FZPSimulatorOptions, FZPCalculationResult
 
 from orangecontrib.shadow.widgets.gui.ow_generic_element import GenericElement
 
@@ -28,8 +24,7 @@ GOOD = 1
 COLLIMATED_SOURCE_LIMIT = 1e4 #m
 
 class FresnelZonePlate(GenericElement):
-
-    name = "Fresnel Zone Plate (Beta)"
+    name = "Hybrid Fresnel Zone Plate"
     description = "Shadow OE: Fresnel Zone Plate"
     icon = "icons/zone_plate.png"
     maintainer = "Luca Rebuffi"
@@ -487,9 +482,15 @@ class FresnelZonePlate(GenericElement):
 
                     self.progressBarSet(10)
 
-                    if self.source_distance_flag == 0:
-                        self.source_distance = self.source_plane_distance
+                    if self.source_distance_flag == 0: self.source_distance = self.source_plane_distance
 
+                    input_parameters = FZPCalculationInputParameters(source_distance=self.source_distance,
+                                                                     image_distance=self.image_plane_distance if self.image_distance_flag==0 else None,
+                                                                     n_points=self.n_points,
+                                                                     multipool=self.multipool==1,
+                                                                     profile_last_index=self.last_index,
+                                                                     increase_resolution=self.increase_resolution==1,
+                                                                     increase_points=self.increase_points)
                     options = FZPSimulatorOptions(with_central_stop=self.with_central_stop==1,
                                                   cs_diameter=numpy.round(self.cs_diameter*1e-6, 7),
                                                   with_order_sorting_aperture=self.with_order_sorting_aperture==1,
@@ -504,27 +505,30 @@ class FresnelZonePlate(GenericElement):
                                                   n_slices=self.n_slices,
                                                   with_complex_amplitude=False,
                                                   store_partial_results=False)
-                    attributes = FZPAttributes(height=numpy.round(self.height*1e-9, 7),
+                    attributes = FZPAttributes(height=numpy.round(self.height*1e-9, 10),
                                                diameter=numpy.round(self.diameter*1e-6, 7),
                                                b_min=numpy.round(self.b_min*1e-9, 10),
                                                zone_plate_material=self.zone_plate_material,
                                                template_material=self.template_material)
 
-                    zone_plate_beam = self.get_zone_plate_beam(attributes)
-
                     self.progressBarSet(30)
 
-                    self.avg_energy = numpy.round(ShadowPhysics.getEnergyFromShadowK(numpy.average(zone_plate_beam._beam.rays[numpy.where(zone_plate_beam._beam.rays[:, 9] == GOOD), 10])), 2)
+                    fzp = ShadowFresnelZonePlate(options=options,
+                                                 attributes=attributes,
+                                                 widget=self)
 
-                    fzp_simulator = FresnelZonePlateSimulator(attributes=attributes, options=options)
-                    fzp_simulator.initialize(energy_in_KeV=self.avg_energy/1000, n_points=self.n_points, multipool=self.multipool==1)
+                    beam_out, calculation_result = fzp.run_fzp_hybrid_method(input_parameters)
 
-                    self.number_of_zones = fzp_simulator.n_zones
-                    self.focal_distance = numpy.round(fzp_simulator.focal_distance/self.workspace_units_to_m, 6)
+                    self.avg_energy      = fzp.get_energy_in_KeV()
+                    self.image_distance  = numpy.round(fzp.get_zp_image_distance(), 6)
+                    self.number_of_zones = fzp.get_n_zones()
+                    self.focal_distance  = numpy.round(fzp.get_zp_focal_distance(), 6)
+                    self.efficiency      = round(calculation_result.efficiency*100, 2)
 
-                    beam_out = self.get_output_beam(zone_plate_beam, fzp_simulator)
+                    self.plot_propagation_results(calculation_result)
 
                     self.progressBarSet(80)
+
 
                     if self.trace_shadow:
                         grabber.stop()
@@ -644,162 +648,9 @@ class FresnelZonePlate(GenericElement):
     def set_ImageDistanceFlag(self):
         self.le_image_plane_distance.setEnabled(self.image_distance_flag==0)
 
-    ######################################################################
-    # ZONE PLATE CALCULATION
-    ######################################################################
-
-    def get_zone_plate_beam(self, attributes):       # WS Units
-
-        empty_element = ShadowOpticalElement.create_empty_oe()
-
-        empty_element._oe.DUMMY        = self.workspace_units_to_cm
-        empty_element._oe.T_SOURCE     = self.source_plane_distance
-        empty_element._oe.T_IMAGE      = 0.0
-        empty_element._oe.T_INCIDENCE  = 0.0
-        empty_element._oe.T_REFLECTION = 180.0
-        empty_element._oe.ALPHA        = 0.0
-
-        empty_element._oe.FWRITE = 3
-        empty_element._oe.F_ANGLE = 0
-
-        n_screen = 1
-        i_screen = numpy.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        i_abs = numpy.zeros(10)
-        i_slit = numpy.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        i_stop = numpy.zeros(10)
-        k_slit = numpy.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        thick = numpy.zeros(10)
-        file_abs = numpy.array(['', '', '', '', '', '', '', '', '', ''])
-        rx_slit = numpy.zeros(10)
-        rz_slit = numpy.zeros(10)
-        sl_dis = numpy.zeros(10)
-        file_scr_ext = numpy.array(['', '', '', '', '', '', '', '', '', ''])
-        cx_slit = numpy.zeros(10)
-        cz_slit = numpy.zeros(10)
-
-        sl_dis[0] = 0.0
-        rx_slit[0] = attributes.diameter/self.workspace_units_to_m
-        rz_slit[0] = attributes.diameter/self.workspace_units_to_m
-        cx_slit[0] = 0.0
-        cz_slit[0] = 0.0
-
-        empty_element._oe.set_screens(n_screen,
-                                      i_screen,
-                                      i_abs,
-                                      sl_dis,
-                                      i_slit,
-                                      i_stop,
-                                      k_slit,
-                                      thick,
-                                      file_abs,
-                                      rx_slit,
-                                      rz_slit,
-                                      cx_slit,
-                                      cz_slit,
-                                      file_scr_ext)
-
-        output_beam = ShadowBeam.traceFromOE(self.input_beam, empty_element, history=True, widget_class_name=type(self).__name__)
-
-        return output_beam
-
-    def get_output_beam(self, zone_plate_beam, fzp_simulator):
-        # ----------------------------------------------------------------------------------------
-        # raytracing of an ideal lens to focal position
-        ideal_lens = ShadowOpticalElement.create_ideal_lens()
-
-        focal_distance      = fzp_simulator.focal_distance/self.workspace_units_to_m
-        self.image_distance = numpy.round(1 / ((1 / focal_distance) - (1 / self.source_distance)), 6)
-
-        ideal_lens._oe.focal_x = focal_distance
-        ideal_lens._oe.focal_z = focal_distance
-
-        ideal_lens._oe.user_units_to_cm = self.workspace_units_to_cm
-        ideal_lens._oe.T_SOURCE         = 0.0
-        ideal_lens._oe.T_IMAGE          = 0.0 # hybrid screen!
-
-        output_beam = ShadowBeam.traceIdealLensOE(zone_plate_beam, ideal_lens, history=True)
-
-        # ----------------------------------------------------------------------------------------
-
-        intensity, _, efficiency = fzp_simulator.simulate()
-
-        profile_1D = intensity[-1, :]
-        self.efficiency = numpy.round(efficiency*100, 3)
-
-        #----------------------------------------------------------------------------------------
-        # from Hybrid: the ideal focusing is corrected by using the image at focus as a divergence correction distribution
-
-        X, Y, dif_xpzp = fzp_simulator.create_2D_profile(profile_1D, self.last_index)
-        
-        x = X[0, :]
-        z = Y[:, 0]
-
-        xp = x/fzp_simulator.focal_distance
-        zp = z/fzp_simulator.focal_distance
-
-        data_1D = profile_1D[:self.last_index]
-        radius  = numpy.arange(0, fzp_simulator.max_radius, fzp_simulator.step)[:self.last_index]
-
-        if self.increase_resolution:
-            interpolator = interp1d(radius, data_1D, bounds_error=False, fill_value=0.0, kind='quadratic')
-            radius = numpy.linspace(radius[0], radius[-1], self.increase_points)
-            
-            data_1D = interpolator(radius)
-            
-            interpolator = RectBivariateSpline(xp, zp, dif_xpzp, bbox=[None, None, None, None], kx=2, ky=2, s=0)
-            x  = numpy.linspace(x[0], x[-1], self.increase_points)
-            z  = numpy.linspace(z[0], z[-1], self.increase_points)
-            xp = numpy.linspace(xp[0], xp[-1], self.increase_points)
-            zp = numpy.linspace(zp[0], zp[-1], self.increase_points)
-
-            dif_xpzp = interpolator(xp, zp)
-
-        go = numpy.where(output_beam._beam.rays[:, 9] == GOOD)
-
-        dx_ray = numpy.arctan(output_beam._beam.rays[go, 3] / output_beam._beam.rays[go, 4])  # calculate divergence from direction cosines from SHADOW file  dx = atan(v_x/v_y)
-        dz_ray = numpy.arctan(output_beam._beam.rays[go, 5] / output_beam._beam.rays[go, 4])  # calculate divergence from direction cosines from SHADOW file  dz = atan(v_z/v_y)
-
-        s2d = Sampler2D(dif_xpzp, xp, zp)
-
-        pos_dif_x, pos_dif_z = s2d.get_n_sampled_points(dx_ray.shape[1])
-
-        # new divergence distribution: convolution
-        dx_conv = dx_ray + numpy.arctan(pos_dif_x)  # add the ray divergence kicks
-        dz_conv = dz_ray + numpy.arctan(pos_dif_z)  # add the ray divergence kicks
-
-        # correction to the position with the divergence kick from the waveoptics calculation
-        # the correction is made on the positions at the hybrid screen (T_IMAGE = 0)
-        image_distance = (self.image_distance if self.image_distance_flag==1 else self.image_plane_distance)
-
-        xx_image = output_beam._beam.rays[go, 0] + image_distance * numpy.tan(dx_conv) # ray tracing to the image plane
-        zz_image = output_beam._beam.rays[go, 2] + image_distance * numpy.tan(dz_conv) # ray tracing to the image plane
-
-        output_beam._oe_number = self.input_beam._oe_number + 1
-
-        angle_num = numpy.sqrt(1 + (numpy.tan(dz_conv)) ** 2 + (numpy.tan(dx_conv)) ** 2)
-
-        output_beam._beam.rays[go, 0] = copy.deepcopy(xx_image)
-        output_beam._beam.rays[go, 2] = copy.deepcopy(zz_image)
-        output_beam._beam.rays[go, 3] = numpy.tan(dx_conv) / angle_num
-        output_beam._beam.rays[go, 4] = 1 / angle_num
-        output_beam._beam.rays[go, 5] = numpy.tan(dz_conv) / angle_num
-        #----------------------------------------------------------------------------------------
-
-        efficiency_factor = numpy.sqrt(efficiency)
-        output_beam._beam.rays[go, 6] *= efficiency_factor
-        output_beam._beam.rays[go, 7] *= efficiency_factor
-        output_beam._beam.rays[go, 8] *= efficiency_factor
-        output_beam._beam.rays[go, 15] *= efficiency_factor
-        output_beam._beam.rays[go, 16] *= efficiency_factor
-        output_beam._beam.rays[go, 17] *= efficiency_factor
-
-        self.plot_propagation_results(radius*1e6, data_1D, x*1e6, z*1e6, dif_xpzp)
-
-        return output_beam
-
-    def plot_propagation_results(self, radius, data_1D, x, z, data2D):
-        self.plot_1D(0, radius, data_1D)
-        self.plot_2D(1, x, z, data2D)
+    def plot_propagation_results(self, calculation_result : FZPCalculationResult):
+        self.plot_1D(0, calculation_result.radius*1e6, calculation_result.intensity_profile)
+        self.plot_2D(1, calculation_result.xp * 1e6, calculation_result.zp * 1e6, calculation_result.dif_xpzp)
 
     def plot_1D(self, index, radius, profile_1D, replace=True, profile_name="z pos #1", control=False, color='blue'):
         if self.prop_plot_canvas[index] is None:
@@ -879,8 +730,8 @@ class FresnelZonePlate(GenericElement):
                              replace=True)
 
         self.prop_plot_canvas[index].setActiveImage("rotated")
-        self.prop_plot_canvas[index].setGraphXLabel("X [\u03bcm]")
-        self.prop_plot_canvas[index].setGraphYLabel("Z [\u03bcm]")
-        self.prop_plot_canvas[index].setGraphTitle("2D Intensity Profile")
+        self.prop_plot_canvas[index].setGraphXLabel("X' [\u03bcrad]")
+        self.prop_plot_canvas[index].setGraphYLabel("Z' [\u03bcrad]")
+        self.prop_plot_canvas[index].setGraphTitle("2D Divergence Profile")
 
 
