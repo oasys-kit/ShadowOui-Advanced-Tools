@@ -499,10 +499,10 @@ def __create_initial_wavefront_mesh(widget, elecBeam, energy):
     wfr.mesh.eStart = energy  # Initial Photon Energy [eV]
     wfr.mesh.eFin = wfr.mesh.eStart  # Final Photon Energy [eV]
 
-    wfr.mesh.xStart = -0.5 * source_dimension_wf_h_slit_gap  # Initial Horizontal Position [m]
-    wfr.mesh.xFin = -1 * wfr.mesh.xStart  # 0.00015 #Final Horizontal Position [m]
-    wfr.mesh.yStart = -0.5 * source_dimension_wf_v_slit_gap  # Initial Vertical Position [m]
-    wfr.mesh.yFin = -1 * wfr.mesh.yStart  # 0.00015 #Final Vertical Position [m]
+    wfr.mesh.xStart = -0.5 * source_dimension_wf_h_slit_gap + widget.source_dimension_wf_h_slit_c  # Initial Horizontal Position [m]
+    wfr.mesh.xFin   =  0.5 * source_dimension_wf_h_slit_gap + widget.source_dimension_wf_h_slit_c  # 0.00015 #Final Horizontal Position [m]
+    wfr.mesh.yStart = -0.5 * source_dimension_wf_v_slit_gap + widget.source_dimension_wf_v_slit_c  # Initial Vertical Position [m]
+    wfr.mesh.yFin   =  0.5 * source_dimension_wf_v_slit_gap + widget.source_dimension_wf_v_slit_c  # 0.00015 #Final Vertical Position [m]
 
     wfr.partBeam = elecBeam
 

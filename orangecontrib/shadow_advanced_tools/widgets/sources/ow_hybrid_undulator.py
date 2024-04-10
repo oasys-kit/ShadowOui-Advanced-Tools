@@ -373,8 +373,13 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
 
         left_box_3 = oasysgui.widgetBox(tab_wf, "Divergence Distribution Propagation Parameters", addSpace=False, orientation="vertical")
 
-        oasysgui.lineEdit(left_box_3, self, "source_dimension_wf_h_slit_gap", "H Slit Gap [m]", labelWidth=250, valueType=float, orientation="horizontal", callback=self.setDataX)
-        oasysgui.lineEdit(left_box_3, self, "source_dimension_wf_v_slit_gap", "V Slit Gap [m]", labelWidth=250, valueType=float, orientation="horizontal", callback=self.setDataY)
+        box = oasysgui.widgetBox(left_box_3, "", addSpace=False, orientation="horizontal")
+        oasysgui.lineEdit(box, self, "source_dimension_wf_h_slit_gap", "H Slit Gap [m]", labelWidth=130, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(box, self, "source_dimension_wf_h_slit_c", "  Center [m]", labelWidth=50, valueType=float, orientation="horizontal")
+        box = oasysgui.widgetBox(left_box_3, "", addSpace=False, orientation="horizontal")
+        oasysgui.lineEdit(box, self, "source_dimension_wf_v_slit_gap", "V Slit Gap [m]", labelWidth=130, valueType=float, orientation="horizontal")
+        oasysgui.lineEdit(box, self, "source_dimension_wf_v_slit_c", "  Center [m]", labelWidth=50, valueType=float, orientation="horizontal")
+
         oasysgui.lineEdit(left_box_3, self, "source_dimension_wf_h_slit_points", "H Slit Points", labelWidth=250, valueType=int, orientation="horizontal", callback=self.setDataX)
         oasysgui.lineEdit(left_box_3, self, "source_dimension_wf_v_slit_points", "V Slit Points", labelWidth=250, valueType=int, orientation="horizontal", callback=self.setDataY)
         oasysgui.lineEdit(left_box_3, self, "source_dimension_wf_distance", "Propagation Distance [m]\n(relative to the center of the ID)", labelWidth=250, valueType=float, orientation="horizontal")
@@ -623,6 +628,9 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
         x2 = 0.5 * source_dimension_wf_h_slit_gap
         x1 = -x2
 
+        x1 += self.source_dimension_wf_h_slit_c
+        x2 += self.source_dimension_wf_h_slit_c
+
         self.dataX = 1e3 * numpy.linspace(x1, x2, source_dimension_wf_h_slit_points)
 
     def setDataY(self):
@@ -631,6 +639,9 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
 
         y2 = 0.5 * source_dimension_wf_v_slit_gap
         y1 = -y2
+
+        y1 += self.source_dimension_wf_h_slit_c
+        y2 += self.source_dimension_wf_h_slit_c
 
         self.dataY = 1e3*numpy.linspace(y1, y2, source_dimension_wf_v_slit_points)
 
@@ -792,8 +803,10 @@ class HybridUndulator(GenericElement, HybridUndulatorAttributes):
                     if isinstance(slit, Slit) and isinstance(slit.get_boundary_shape(), Rectangle):
                         rectangle = slit.get_boundary_shape()
 
-                        self.source_dimension_wf_h_slit_gap = rectangle._x_right - rectangle._x_left
-                        self.source_dimension_wf_v_slit_gap = rectangle._y_top - rectangle._y_bottom
+                        self.source_dimension_wf_h_slit_gap = numpy.abs(rectangle._x_right - rectangle._x_left)
+                        self.source_dimension_wf_h_slit_c = 0.5*(rectangle._x_right + rectangle._x_left)
+                        self.source_dimension_wf_v_slit_gap = numpy.abs(rectangle._y_top - rectangle._y_bottom)
+                        self.source_dimension_wf_v_slit_c = 0.5 * (rectangle._y_top + rectangle._y_bottom)
                         self.source_dimension_wf_distance = coordinates.p()
                 elif not data._light_source is None and isinstance(data._light_source, LightSource):
                     light_source = data._light_source

@@ -94,6 +94,8 @@ class HybridUndulatorAttributes():
 
     source_dimension_wf_h_slit_gap = Setting(0.0015)
     source_dimension_wf_v_slit_gap = Setting(0.0015)
+    source_dimension_wf_h_slit_c = Setting(0.0)
+    source_dimension_wf_v_slit_c =Setting( 0.0)
     source_dimension_wf_h_slit_points = Setting(301)
     source_dimension_wf_v_slit_points = Setting(301)
     source_dimension_wf_distance = Setting(28.0)
