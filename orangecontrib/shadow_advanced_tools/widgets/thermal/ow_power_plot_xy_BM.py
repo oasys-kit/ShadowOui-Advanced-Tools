@@ -83,6 +83,9 @@ class PowerPlotXYBM(AbstractPowerPlotXY):
 
         oasysgui.lineEdit(interpolation_box, self, "nbins_interpolation", "Number of Bins for energy interpolation", labelWidth=250, valueType=int, orientation="horizontal")
 
+    def plot_cumulated_data(self):
+        if not self.input_beam is None: self.plot_results()
+
     def replace_fig(self, shadow_beam, var_x, var_y, xrange, yrange, nbins_h, nbins_v, nolost):
         if self.plot_canvas is None:
             self.plot_canvas = PowerPlotXYWidget()

@@ -239,10 +239,8 @@ class PowerPlotXYWidget(QWidget):
         final_power_per_ray       = numpy.zeros(len(final_power_shadow))
         final_power_per_ray[good] = final_power_shadow[good] / ticket["histogram"][good]
 
-        #go = numpy.where(shadow_beam._beam.rays[:, 9] == 1)
         go = numpy.where(beam.rays[:, 9] == 1)
 
-        #rays_energy = ShadowPhysics.getEnergyFromShadowK(shadow_beam._beam.rays[go, 10])
         rays_energy = ShadowPhysics.getEnergyFromShadowK(beam.rays[go, 10])
 
         ticket = beam.histo2(var_x, var_y, nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange, nolost=1, ref=0)
@@ -267,7 +265,7 @@ class PowerPlotXYWidget(QWidget):
                                    nbins_h=nbins_h, nbins_v=nbins_v, xrange=xrange, yrange=yrange,
                                    nolost=1, ref=23)
 
-        ticket['histogram'][numpy.where(ticket['histogram'] < 1e-7)] = 0.0
+        ticket['histogram'][numpy.where(ticket['histogram'] < 1e-15)] = 0.0
 
         ticket['h_label'] = var_x
         ticket['v_label'] = var_y
