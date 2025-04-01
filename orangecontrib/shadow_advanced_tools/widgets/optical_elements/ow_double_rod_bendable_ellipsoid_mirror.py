@@ -91,11 +91,11 @@ class DoubleRodBendableEllipsoidMirror(ow_ellipsoid_element.EllipsoidElement):
 
     R0_out    = 0.0
     eta_out   = 0.0
-    W2_out     = 0.0
+    W2_out    = 0.0
 
     R0_fixed    = Setting(False)
-    eta_fixed = Setting(False)
-    W2_fixed     = Setting(False)
+    eta_fixed   = Setting(False)
+    W2_fixed    = Setting(False)
 
     R0_min    = Setting(0.0)
     eta_min = Setting(0.0)
