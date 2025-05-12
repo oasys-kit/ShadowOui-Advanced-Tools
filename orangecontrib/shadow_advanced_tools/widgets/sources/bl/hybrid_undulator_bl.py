@@ -177,7 +177,7 @@ def __generate_initial_beam(widget):
 
 
 def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_calculations):
-    if widget.use_harmonic == 2:
+    if widget.use_harmonic == 2: # range
         energy_points = int(widget.energy_points)
 
         x_array = numpy.full(energy_points, None)
@@ -214,7 +214,10 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
 
             widget.setStatusMessage("Running SRW for energy: " + str(energy))
 
-            x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, _ = __run_SRW_calculation(widget, energy, flux_from_stokes[i], False)
+            x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, _ = __run_SRW_calculation(widget,
+                                                                                                                                           energy,
+                                                                                                                                           flux_from_stokes=flux_from_stokes[i],
+                                                                                                                                           do_cumulated_calculations=False)
 
             x_array[i] = x
             z_array[i] = z
@@ -260,7 +263,13 @@ def __apply_undulator_distributions_calculation(widget, beam_out, do_cumulated_c
         if widget.distribution_source == 0:
             widget.setStatusMessage("Running SRW")
 
-            x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power = __run_SRW_calculation(widget, energy, do_cumulated_calculations)
+            if widget.use_stokes == 1: flux_from_stokes = __get_integrated_flux_from_stokes(widget, [energy])[0]
+            else:                      flux_from_stokes = 0.0
+
+            x, z, intensity_source_dimension, x_first, z_first, intensity_angular_distribution, integrated_flux, total_power = __run_SRW_calculation(widget,
+                                                                                                                                                     energy,
+                                                                                                                                                     flux_from_stokes=flux_from_stokes,
+                                                                                                                                                     do_cumulated_calculations=do_cumulated_calculations)
         elif widget.distribution_source == 1:
             widget.setStatusMessage("Loading SRW files")
 
